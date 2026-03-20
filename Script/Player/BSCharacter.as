@@ -95,7 +95,7 @@ class ABSCharacter : ACharacter
 		Camera.bEnableFirstPersonFieldOfView = true;
 		Camera.bEnableFirstPersonScale = true;
 		Camera.FirstPersonFieldOfView = 70.0f;
-		Camera.FieldOfView = 120.0f;
+		Camera.FieldOfView = 90.0f;
 		Camera.FirstPersonScale = 0.6f;
 
 		SpotLight.SetIntensityUnits(ELightUnits::Lumens);
