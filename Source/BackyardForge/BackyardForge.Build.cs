@@ -32,9 +32,7 @@ public class BackyardForge : ModuleRules
 			"BackyardForge",
 			"BackyardForge/Framework",
 			"BackyardForge/Player",
-			"BackyardForge/Variant_Horror",
-			"BackyardForge/Variant_Horror/UI",
-			"BackyardForge/Variant_Shooter",
+"BackyardForge/Variant_Shooter",
 			"BackyardForge/Variant_Shooter/AI",
 			"BackyardForge/Variant_Shooter/UI",
 			"BackyardForge/Variant_Shooter/Weapons"

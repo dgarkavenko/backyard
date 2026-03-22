@@ -4,15 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**BackyardForge** is a simulator sandbox built on a custom Unreal Engine 5.7 fork with [AngelScript support by Hazelight](https://angelscript.hazelight.se/). It uses a variant-based architecture to prototype different game mechanics (Horror, Shooter, etc.) sharing a common first-person character base.
+**BackyardForge** is a first-person simulator game built on a custom Unreal Engine 5.7 fork with [AngelScript support by Hazelight](https://angelscript.hazelight.se/). It uses a variant-based architecture to prototype different game mechanics (Horror, Shooter, etc.) sharing a common first-person character base.
 
-The engine is registered by GUID (`{CDA83A63-4999-9786-3CC3-6CA68D27C361}`) — not a standard Epic launcher install. Build and run through the custom UE fork's editor or build tools.
+The engine is registered by GUID (`{CDA83A63-4999-9786-3CC3-6CA68D27C361}`) — not a standard Epic launcher install. The UE source lives at `D:\Unreal\ue-as`. Build and run through the custom UE fork's editor or build tools.
 
 ## Build & Development
 
 - **Solution**: `BackyardForge.sln` — open in Visual Studio (requires components listed in `.vsconfig`)
 - **Build targets**: `BackyardForge.Target.cs` (game), `BackyardForgeEditor.Target.cs` (editor) — both use `BuildSettingsVersion.V6`
 - The project will eventually use **AngelScript** (`.as` files in a `Script/` folder) for gameplay prototyping alongside C++. See https://angelscript.hazelight.se/ for API reference, binding patterns, and scripting conventions.
+- **AngelScript examples**: `C:\backyard\Script-Examples` contains reference `.as` files — use these for patterns and conventions alongside the [official Hazelight docs](https://angelscript.hazelight.se/).
+- **Saltborne examples**: `C:\unreal\Saltborne\Saltborne\Script` — production AngelScript codebase with advanced patterns: `UCLASS(DefaultToInstanced, EditInlineNew)`, `UPROPERTY(Instanced)`, namespaces, mixins, `SpawnActor`, `Material::CreateDynamicMaterialInstance`, `TWeakObjectPtr`, `#if EDITOR`.
+- **C++ escape hatch**: When AngelScript lacks access to an engine API, create base C++ classes or `UBlueprintFunctionLibrary` statics that AngelScript can call or inherit from.
 
 ## Architecture
 
@@ -59,9 +62,23 @@ Default map: `Lvl_FirstPerson`. Each variant has its own level (`Lvl_Horror`, `L
 
 `AShooterAIController` owns `StateTreeAIComponent` + `AIPerceptionComponent` (sight/hearing). Custom StateTree nodes handle enemy sensing, line-of-sight cone checks, face-target, and shoot-at-target behaviors. `AShooterNPCSpawner` manages one-at-a-time NPC respawning.
 
+### Interaction System
+
+Data-driven interaction foundation in `Script/Interaction/`. Each interactable has a list of actions; the player filters by context (held items, tags).
+
+- **Detection**: Camera line trace on `Interaction` channel (focused) + overlap sphere on character (awareness/glow)
+- **`UBSInteractable`** component: attach to any actor, reference a `UBSInteractionActionSet` data asset. Fires `OnActionExecuted` delegate when an action is performed.
+- **`FBSInteractionAction`**: action tag, display name, `UInputAction` reference, required `FGameplayTagContainer`
+- **`BSInteractionLibrary.as`**: free functions — `TraceForInteractable()`, `GetFilteredActions()`, `ExecuteAction()`
+- **Requirements**: GameplayTag matching — held item grants tags, action requires tags. `RequiredTags.IsEmpty()` means no requirement.
+
+### Sentry System
+
+Modular turret in `Script/Sentry/`. Data-driven via `UBSSentryPreset` data asset (meshes + constraints). Component chain: Base → Rotator01 → Rotator02 → Body via `s_pivot` sockets. `AimAt(FVector)` solves the 2-joint rotation chain. Geometry cached in `BeginPlay` for performance with hundreds of instances.
+
 ## Config Notes
 
-- Custom collision channel: `Projectile` (ECC_GameTraceChannel1, default Block)
+- Custom collision channels: `Projectile` (ECC_GameTraceChannel1, default Block), `Interaction` (ECC_GameTraceChannel2, default Ignore, trace type)
 - `bForgetStaleActors=True` in AISystem config
 - Renderer: DX11, SM5, lightweight config — no Lumen, no ray tracing, no Nanite, no Substrate, no VSM. SSR reflections, cascaded shadows, all post-process effects disabled. See README.md for full rationale.
 - Engine redirects from `TP_FirstPerson` and `nexss` template classes to `BF` classes (in DefaultEngine.ini)
@@ -73,6 +90,11 @@ Default map: `Lvl_FirstPerson`. Each variant has its own level (`Lvl_Horror`, `L
 - UI pattern: abstract C++ `UUserWidget` subclass with `BlueprintImplementableEvent` methods → Blueprint widget implements visuals
 - Input: Enhanced Input only (no legacy). Input mapping contexts managed in PlayerController.
 - When adding AngelScript files, place them in `Script/` at the project root following Hazelight conventions
+- Prefer functional style over OOP — free functions, function libraries, data-driven design over deep class hierarchies
+- Performance-aware programming — cache what you can, avoid per-frame allocations and redundant lookups, think about scale (hundreds of actors)
+- No excessive code comments — code should be self-explanatory
+- Full variable names — `PlayerController` not `PC`, `WorldLocation` not `Loc`
+- Allman brace style — opening `{` on new line, always use braces for `if`/`else`/`for`/`while` blocks, even single-line bodies
 
 ## C++ Macro Patterns
 

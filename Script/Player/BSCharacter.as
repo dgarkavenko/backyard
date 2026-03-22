@@ -12,6 +12,18 @@ class ABSCharacter : ACharacter
 	UPROPERTY(DefaultComponent, Attach = Camera)
 	USpotLightComponent SpotLight;
 
+	UPROPERTY(DefaultComponent)
+	USphereComponent InteractionSphere;
+
+	UPROPERTY(DefaultComponent)
+	UBSPlacementComponent PlacementComponent;
+
+	UPROPERTY(EditAnywhere, Category = "Interaction", meta = (ClampMin = "50", ClampMax = "1000", Units = "cm"))
+	float InteractionAwarenessRadius = 300.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Interaction", meta = (ClampMin = "100", ClampMax = "5000", Units = "cm"))
+	float CameraTraceDistance = 1000.0f;
+
 	UPROPERTY(Category = "Input")
 	UInputAction MoveAction;
 
@@ -26,6 +38,21 @@ class ABSCharacter : ACharacter
 
 	UPROPERTY(Category = "Input")
 	UInputAction SprintAction;
+
+	UPROPERTY(Category = "Input")
+	UInputAction PlacementToggleAction;
+
+	UPROPERTY(Category = "Input")
+	UInputAction PlacementConfirmAction;
+
+	UPROPERTY(Category = "Input")
+	UInputAction Inventory1Action;
+
+	UPROPERTY(Category = "Input")
+	UInputAction Inventory2Action;
+
+	UPROPERTY(Category = "Input")
+	UInputAction Inventory3Action;
 
 	UPROPERTY(EditAnywhere, Category = "Walk")
 	float WalkSpeed = 250.0f;
@@ -56,6 +83,10 @@ class ABSCharacter : ACharacter
 	float SprintMeter = 0.0f;
 	FTimerHandle SprintTimer;
 	UEnhancedInputComponent InputComp;
+	TArray<UBSInteractable> NearbyInteractables;
+	FHitResult CameraTraceResult;
+	bool bCameraTraceHit = false;
+	UBSInteractable FocusedInteractable;
 
 	default Camera.RelativeLocation = FVector(-2.8f, 5.89f, 0.0f);
 	default Camera.RelativeRotation = FRotator(0.0f, 90.0f, -90.0f);
@@ -80,6 +111,9 @@ class ABSCharacter : ACharacter
 	default FirstPersonMesh.bOnlyOwnerSee = true;
 	default FirstPersonMesh.SetCollisionProfileName(n"NoCollision");
 
+	default InteractionSphere.SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	default InteractionSphere.SetGenerateOverlapEvents(true);
+
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()
 	{
@@ -100,6 +134,10 @@ class ABSCharacter : ACharacter
 
 		SpotLight.SetIntensityUnits(ELightUnits::Lumens);
 
+		InteractionSphere.SetSphereRadius(InteractionAwarenessRadius);
+		InteractionSphere.OnComponentBeginOverlap.AddUFunction(this, n"OnInteractionSphereBeginOverlap");
+		InteractionSphere.OnComponentEndOverlap.AddUFunction(this, n"OnInteractionSphereEndOverlap");
+
 		SprintMeter = SprintTime;
 		CharacterMovement.MaxWalkSpeed = WalkSpeed;
 
@@ -114,6 +152,12 @@ class ABSCharacter : ACharacter
 		InputComp.BindAction(JumpAction, ETriggerEvent::Completed, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_JumpEnd"));
 		InputComp.BindAction(SprintAction, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_SprintStart"));
 		InputComp.BindAction(SprintAction, ETriggerEvent::Completed, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_SprintEnd"));
+
+		InputComp.BindAction(PlacementToggleAction, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_PlacementToggle"));
+		InputComp.BindAction(PlacementConfirmAction, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_PlacementConfirm"));
+		InputComp.BindAction(Inventory1Action, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_Inventory1"));
+		InputComp.BindAction(Inventory2Action, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_Inventory2"));
+		InputComp.BindAction(Inventory3Action, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_Inventory3"));
 	}
 
 	UFUNCTION(BlueprintOverride)
@@ -171,6 +215,104 @@ class ABSCharacter : ACharacter
 		{
 			CharacterMovement.MaxWalkSpeed = WalkSpeed;
 			OnSprintStateChanged.Broadcast(false);
+		}
+	}
+
+	// ── Camera Trace ──
+
+	UFUNCTION(BlueprintOverride)
+	void Tick(float DeltaSeconds)
+	{
+		FVector Start = Camera.GetWorldLocation();
+		FVector End = Start + Camera.GetForwardVector() * CameraTraceDistance;
+
+		TArray<AActor> IgnoredActors;
+		IgnoredActors.Add(this);
+
+		bCameraTraceHit = System::LineTraceSingle(
+			Start,
+			End,
+			ETraceTypeQuery::Visibility,
+			false,
+			IgnoredActors,
+			EDrawDebugTrace::None,
+			CameraTraceResult,
+			true
+		);
+
+		if (PlacementComponent.bActive)
+		{
+			if (bCameraTraceHit)
+			{
+				PlacementComponent.UpdatePreview(CameraTraceResult);
+			}
+			FocusedInteractable = nullptr;
+		}
+		else
+		{
+			FocusedInteractable = bCameraTraceHit ? BSInteraction::CheckHitForInteractable(CameraTraceResult) : nullptr;
+		}
+	}
+
+	// ── Placement Input ──
+
+	UFUNCTION()
+	void Input_PlacementToggle(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
+	{
+		PlacementComponent.Toggle();
+	}
+
+	UFUNCTION()
+	void Input_PlacementConfirm(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
+	{
+		if (PlacementComponent.bActive)
+		{
+			PlacementComponent.ConfirmPlacement();
+		}
+	}
+
+	UFUNCTION()
+	void Input_Inventory1(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
+	{
+		PlacementComponent.SelectSlot(0);
+	}
+
+	UFUNCTION()
+	void Input_Inventory2(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
+	{
+		PlacementComponent.SelectSlot(1);
+	}
+
+	UFUNCTION()
+	void Input_Inventory3(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
+	{
+		PlacementComponent.SelectSlot(2);
+	}
+
+	// ── Interaction Awareness ──
+
+	UFUNCTION()
+	void OnInteractionSphereBeginOverlap(
+		UPrimitiveComponent OverlappedComponent, AActor OtherActor,
+		UPrimitiveComponent OtherComponent, int OtherBodyIndex,
+		bool bFromSweep, const FHitResult&in Hit)
+	{
+		UBSInteractable Interactable = UBSInteractable::Get(OtherActor);
+		if (Interactable != nullptr && !NearbyInteractables.Contains(Interactable))
+		{
+			NearbyInteractables.Add(Interactable);
+		}
+	}
+
+	UFUNCTION()
+	void OnInteractionSphereEndOverlap(
+		UPrimitiveComponent OverlappedComponent, AActor OtherActor,
+		UPrimitiveComponent OtherComponent, int OtherBodyIndex)
+	{
+		UBSInteractable Interactable = UBSInteractable::Get(OtherActor);
+		if (Interactable != nullptr)
+		{
+			NearbyInteractables.Remove(Interactable);
 		}
 	}
 
