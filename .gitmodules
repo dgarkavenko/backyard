@@ -4,6 +4,3 @@
 [submodule "Plugins/ForgeryUI"]
 	path = Plugins/ForgeryUI
 	url = https://github.com/dgarkavenko/UE-ForgeUI.git
-[submodule "Plugins/VoxelFree"]
-	path = Plugins/VoxelFree
-	url = https://github.com/VoxelPlugin/VoxelPluginFreeLegacy.git
