@@ -20,6 +20,7 @@ class ABSSentry : AActor
 	UBSSentryConfiguration Configuration;
 
 	TArray<UStaticMeshComponent> ChassisElements;
+	int ChassisElementCounter = 0;
 
 	UPROPERTY(EditAnywhere, Category = "Sentry")
 	TWeakObjectPtr<UMaterialInterface> Material;
@@ -33,15 +34,40 @@ class ABSSentry : AActor
 
 	void ApplyConfiguration()
 	{
-		if (Configuration == nullptr || Configuration.Chassis == nullptr)
+		if (Configuration == nullptr)
 		{
 			return;
 		}
+
+		if (Configuration.Chassis == nullptr)
+		{
+			Base.SetStaticMesh(nullptr);
+			Rotator01.SetStaticMesh(nullptr);
+			Rotator02.SetStaticMesh(nullptr);
+			RotatorPlatform.SetStaticMesh(nullptr);
+			Chassis.SetStaticMesh(nullptr);
+			BuildChassisElements();
+			return;
+		}
+
+		Print(f"ApplyConfiguration: Chassis={Configuration.Chassis.GetName()} Arm={Configuration.Chassis.Arm.GetName()}");
+
+		Rotator01.DetachFromParent();
+		Rotator02.DetachFromParent();
+		RotatorPlatform.DetachFromParent();
+		Chassis.DetachFromParent();
 
 		Base.SetStaticMesh(Configuration.Chassis.BaseMesh);
 		Rotator01.SetStaticMesh(Configuration.Chassis.Arm.Rotator01.Mesh);
 		Rotator02.SetStaticMesh(Configuration.Chassis.Arm.Rotator02.Mesh);
 		RotatorPlatform.SetStaticMesh(Configuration.Chassis.Arm.Platform);
+
+		Rotator01.AttachTo(Base, Sentry::ChildSocketName);
+		RotatorPlatform.AttachTo(Rotator01);
+		Rotator02.AttachTo(Rotator01, Sentry::ChildSocketName);
+		Chassis.AttachTo(Rotator02, Sentry::ChildSocketName);
+
+		Print(f"  After reattach: R01 world={Rotator01.WorldLocation} R02 world={Rotator02.WorldLocation} Chassis world={Chassis.WorldLocation}");
 
 		ApplyMaterial(Base);
 		ApplyMaterial(Rotator01);
@@ -52,8 +78,9 @@ class ABSSentry : AActor
 		{
 			float PlatformHeight = RotatorPlatform.StaticMesh.BoundingBox.Extent.Z;
 			RotatorPlatform.RelativeLocation = FVector(0, 0, -PlatformHeight);
+			Print(f"  Platform height={PlatformHeight}");
 		}
-		
+
 		BuildChassisElements();
 	}
 
@@ -64,6 +91,10 @@ class ABSSentry : AActor
 
 	void BuildChassisElements()
 	{
+		for (UStaticMeshComponent Element : ChassisElements)
+		{
+			Element.DestroyComponent(this);
+		}
 		ChassisElements.Empty();
 
 		if (Configuration.Chassis != nullptr)
@@ -81,7 +112,7 @@ class ABSSentry : AActor
 		{
 			const FBSLoadoutElement& Element = Configuration.Loadout.Elements[Index];
 
-			UStaticMeshComponent Component = UStaticMeshComponent::Create(this, FName(f"ChassisElement_{Index}"));
+			UStaticMeshComponent Component = UStaticMeshComponent::Create(this, FName(f"ChassisElement_{ChassisElementCounter++}"));
 			Component.SetStaticMesh(Element.Mesh);
 			ApplyMaterial(Component);
 

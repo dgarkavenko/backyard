@@ -18,41 +18,14 @@ class ABSCharacter : ACharacter
 	UPROPERTY(DefaultComponent)
 	UBSPlacementComponent PlacementComponent;
 
+	UPROPERTY(DefaultComponent)
+	UBSCharacterInputComponent CharacterInputComponent;
+
 	UPROPERTY(EditAnywhere, Category = "Interaction", meta = (ClampMin = "50", ClampMax = "1000", Units = "cm"))
 	float InteractionAwarenessRadius = 300.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Interaction", meta = (ClampMin = "100", ClampMax = "5000", Units = "cm"))
 	float CameraTraceDistance = 1000.0f;
-
-	UPROPERTY(Category = "Input")
-	UInputAction MoveAction;
-
-	UPROPERTY(Category = "Input")
-	UInputAction LookAction;
-
-	UPROPERTY(Category = "Input")
-	UInputAction MouseLookAction;
-
-	UPROPERTY(Category = "Input")
-	UInputAction JumpAction;
-
-	UPROPERTY(Category = "Input")
-	UInputAction SprintAction;
-
-	UPROPERTY(Category = "Input")
-	UInputAction PlacementToggleAction;
-
-	UPROPERTY(Category = "Input")
-	UInputAction PlacementConfirmAction;
-
-	UPROPERTY(Category = "Input")
-	UInputAction Inventory1Action;
-
-	UPROPERTY(Category = "Input")
-	UInputAction Inventory2Action;
-
-	UPROPERTY(Category = "Input")
-	UInputAction Inventory3Action;
 
 	UPROPERTY(EditAnywhere, Category = "Walk")
 	float WalkSpeed = 250.0f;
@@ -82,7 +55,6 @@ class ABSCharacter : ACharacter
 	bool bRecovering = false;
 	float SprintMeter = 0.0f;
 	FTimerHandle SprintTimer;
-	UEnhancedInputComponent InputComp;
 	TArray<UBSInteractable> NearbyInteractables;
 	FHitResult CameraTraceResult;
 	bool bCameraTraceHit = false;
@@ -107,6 +79,7 @@ class ABSCharacter : ACharacter
 
 	default Mesh.VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
 	default Mesh.SetOwnerNoSee(true);
+	default Mesh.SetVisibility(false);
 
 	default FirstPersonMesh.bOnlyOwnerSee = true;
 	default FirstPersonMesh.SetCollisionProfileName(n"NoCollision");
@@ -117,7 +90,7 @@ class ABSCharacter : ACharacter
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()
 	{
-		Mesh.FirstPersonPrimitiveType = EFirstPersonPrimitiveType::WorldSpaceRepresentation;		
+		Mesh.FirstPersonPrimitiveType = EFirstPersonPrimitiveType::WorldSpaceRepresentation;
 		FirstPersonMesh.FirstPersonPrimitiveType = EFirstPersonPrimitiveType::FirstPerson;
 
 		UBSCopyPoseAnimInstance CopyPoseAnimInstance = Cast<UBSCopyPoseAnimInstance>(FirstPersonMesh.AnimInstance);
@@ -125,7 +98,7 @@ class ABSCharacter : ACharacter
 		{
 			CopyPoseAnimInstance.DonorSMC = Mesh;
 		}
-		
+
 		Camera.bEnableFirstPersonFieldOfView = true;
 		Camera.bEnableFirstPersonScale = true;
 		Camera.FirstPersonFieldOfView = 70.0f;
@@ -142,22 +115,6 @@ class ABSCharacter : ACharacter
 		CharacterMovement.MaxWalkSpeed = WalkSpeed;
 
 		SprintTimer = System::SetTimer(this, n"SprintFixedTick", SprintFixedTickTime, bLooping = true);
-
-		InputComp = UEnhancedInputComponent::Get(this);
-		
-		InputComp.BindAction(MoveAction, ETriggerEvent::Triggered, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_Move"));
-		InputComp.BindAction(LookAction, ETriggerEvent::Triggered, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_Look"));
-		InputComp.BindAction(MouseLookAction, ETriggerEvent::Triggered, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_Look"));
-		InputComp.BindAction(JumpAction, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_JumpStart"));
-		InputComp.BindAction(JumpAction, ETriggerEvent::Completed, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_JumpEnd"));
-		InputComp.BindAction(SprintAction, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_SprintStart"));
-		InputComp.BindAction(SprintAction, ETriggerEvent::Completed, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_SprintEnd"));
-
-		InputComp.BindAction(PlacementToggleAction, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_PlacementToggle"));
-		InputComp.BindAction(PlacementConfirmAction, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_PlacementConfirm"));
-		InputComp.BindAction(Inventory1Action, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_Inventory1"));
-		InputComp.BindAction(Inventory2Action, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_Inventory2"));
-		InputComp.BindAction(Inventory3Action, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_Inventory3"));
 	}
 
 	UFUNCTION(BlueprintOverride)
@@ -166,36 +123,7 @@ class ABSCharacter : ACharacter
 		System::ClearAndInvalidateTimerHandle(SprintTimer);
 	}
 
-	UFUNCTION()
-	void Input_Move(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
-	{
-		FVector2D MoveVector = ActionValue.GetAxis2D();
-		AddMovementInput(GetActorRightVector(), MoveVector.X);
-		AddMovementInput(GetActorForwardVector(), MoveVector.Y);
-	}
-
-	UFUNCTION()
-	void Input_Look(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
-	{
-		FVector2D LookVector = ActionValue.GetAxis2D();
-		AddControllerYawInput(LookVector.X);
-		AddControllerPitchInput(LookVector.Y);
-	}
-
-	UFUNCTION()
-	void Input_JumpStart(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
-	{
-		Jump();
-	}
-
-	UFUNCTION()
-	void Input_JumpEnd(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
-	{
-		StopJumping();
-	}
-
-	UFUNCTION()
-	void Input_SprintStart(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
+	void StartSprint()
 	{
 		bSprinting = true;
 
@@ -206,8 +134,7 @@ class ABSCharacter : ACharacter
 		}
 	}
 
-	UFUNCTION()
-	void Input_SprintEnd(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
+	void StopSprint()
 	{
 		bSprinting = false;
 
@@ -217,8 +144,6 @@ class ABSCharacter : ACharacter
 			OnSprintStateChanged.Broadcast(false);
 		}
 	}
-
-	// ── Camera Trace ──
 
 	UFUNCTION(BlueprintOverride)
 	void Tick(float DeltaSeconds)
@@ -252,41 +177,6 @@ class ABSCharacter : ACharacter
 		{
 			FocusedInteractable = bCameraTraceHit ? BSInteraction::CheckHitForInteractable(CameraTraceResult) : nullptr;
 		}
-	}
-
-	// ── Placement Input ──
-
-	UFUNCTION()
-	void Input_PlacementToggle(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
-	{
-		PlacementComponent.Toggle();
-	}
-
-	UFUNCTION()
-	void Input_PlacementConfirm(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
-	{
-		if (PlacementComponent.bActive)
-		{
-			PlacementComponent.ConfirmPlacement();
-		}
-	}
-
-	UFUNCTION()
-	void Input_Inventory1(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
-	{
-		PlacementComponent.SelectSlot(0);
-	}
-
-	UFUNCTION()
-	void Input_Inventory2(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
-	{
-		PlacementComponent.SelectSlot(1);
-	}
-
-	UFUNCTION()
-	void Input_Inventory3(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
-	{
-		PlacementComponent.SelectSlot(2);
 	}
 
 	// ── Interaction Awareness ──
