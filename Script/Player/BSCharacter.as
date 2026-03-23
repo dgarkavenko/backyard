@@ -16,6 +16,9 @@ class ABSCharacter : ACharacter
 	USphereComponent InteractionSphere;
 
 	UPROPERTY(DefaultComponent)
+	UBSHeldItemComponent HeldItemComponent;
+
+	UPROPERTY(DefaultComponent)
 	UBSPlacementComponent PlacementComponent;
 
 	UPROPERTY(DefaultComponent)
@@ -157,7 +160,7 @@ class ABSCharacter : ACharacter
 		bCameraTraceHit = System::LineTraceSingle(
 			Start,
 			End,
-			ETraceTypeQuery::Visibility,
+			ETraceTypeQuery::TraceTypeQuery2,
 			false,
 			IgnoredActors,
 			EDrawDebugTrace::None,
@@ -165,18 +168,7 @@ class ABSCharacter : ACharacter
 			true
 		);
 
-		if (PlacementComponent.bActive)
-		{
-			if (bCameraTraceHit)
-			{
-				PlacementComponent.UpdatePreview(CameraTraceResult);
-			}
-			FocusedInteractable = nullptr;
-		}
-		else
-		{
-			FocusedInteractable = bCameraTraceHit ? BSInteraction::CheckHitForInteractable(CameraTraceResult) : nullptr;
-		}
+		FocusedInteractable = bCameraTraceHit ? BSInteraction::CheckHitForInteractable(CameraTraceResult) : nullptr;
 	}
 
 	// ── Interaction Awareness ──
@@ -211,14 +203,12 @@ class ABSCharacter : ACharacter
 	UFUNCTION()
 	void SprintFixedTick()
 	{
-		// Drain stamina while sprinting, moving, and not recovering
 		if (bSprinting && !bRecovering && GetVelocity().Size() > WalkSpeed)
 		{
 			if (SprintMeter > 0.0f)
 			{
 				SprintMeter = Math::Max(SprintMeter - SprintFixedTickTime, 0.0f);
 
-				// Ran out of stamina — enter recovery mode
 				if (SprintMeter <= 0.0f)
 				{
 					bRecovering = true;
@@ -228,10 +218,8 @@ class ABSCharacter : ACharacter
 		}
 		else
 		{
-			// Recover stamina
 			SprintMeter = Math::Min(SprintMeter + SprintFixedTickTime, SprintTime);
 
-			// Fully recovered — exit recovery mode
 			if (SprintMeter >= SprintTime)
 			{
 				bRecovering = false;
@@ -240,7 +228,6 @@ class ABSCharacter : ACharacter
 			}
 		}
 
-		// Always broadcast the current meter percentage
 		OnSprintMeterUpdated.Broadcast(SprintMeter / SprintTime);
 	}
 }

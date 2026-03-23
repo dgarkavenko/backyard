@@ -25,7 +25,7 @@ class ABSAssemblyBench : AActor
 	TSubclassOf<UCommonActivatableWidget> CraftMenuWidgetClass;
 
 	UPROPERTY(EditAnywhere, Category = "Workbench")
-	TWeakObjectPtr<UMaterialInterface> SentryMaterial;
+	UMaterialInterface SentryMaterial;
 
 	ABSSentry Sentry;
 	APlayerController ActiveUser;
@@ -77,8 +77,6 @@ class ABSAssemblyBench : AActor
 		ABSPlayerController BSController = Cast<ABSPlayerController>(Controller);
 		if (BSController != nullptr)
 		{
-			BSController.EnterWorkbenchInputMode();
-
 			UCommonActivatableWidget Widget = BSController.PushWidgetToPrimaryLayout(
 				GameplayTags::ForgeryUI_Layer_GameMenu,
 				CraftMenuWidgetClass
@@ -106,12 +104,6 @@ class ABSAssemblyBench : AActor
 		}
 
 		System::SetTimer(this, n"OnCameraBlendFinished", 0.5f, false);
-
-		ABSPlayerController BSController = Cast<ABSPlayerController>(ActiveUser);
-		if (BSController != nullptr)
-		{
-			BSController.ExitWorkbenchInputMode();
-		}
 
 		if (CraftMenu != nullptr)
 		{
@@ -158,7 +150,7 @@ class ABSAssemblyBench : AActor
 
 		Sentry.SetActorTickEnabled(false);
 
-		if (SentryMaterial.IsValid())
+		if (SentryMaterial != nullptr)
 		{
 			Sentry.Material = SentryMaterial;
 		}

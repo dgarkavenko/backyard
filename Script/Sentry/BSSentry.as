@@ -23,7 +23,7 @@ class ABSSentry : AActor
 	int ChassisElementCounter = 0;
 
 	UPROPERTY(EditAnywhere, Category = "Sentry")
-	TWeakObjectPtr<UMaterialInterface> Material;
+	UMaterialInterface Material;
 
 	FVector Rotator01PivotOffset;
 	FVector Rotator02PivotOffset;

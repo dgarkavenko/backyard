@@ -1,63 +1,49 @@
 class UBSPlacementComponent : UActorComponent
 {
 	UPROPERTY(EditAnywhere, Category = "Placement")
-	TArray<TSubclassOf<ABSSentry>> InventorySlots;
-
-	UPROPERTY(EditAnywhere, Category = "Placement")
 	UMaterialInterface GhostMaterial;
 
 	bool bActive = false;
-	int SelectedSlot = -1;
-	ABSSentry PreviewActor;
+	AActor PreviewActor;
 
-	void Toggle()
+	void ActivatePlacement(UBSHeldItemComponent HeldItem)
 	{
-		if (bActive)
+		if (HeldItem == nullptr || !HeldItem.IsHolding())
 		{
-			DeactivatePlacement();
+			return;
+		}
+
+		UBSItemData ItemData = HeldItem.HeldItemData;
+		if (ItemData == nullptr)
+		{
+			return;
+		}
+
+		if (ItemData.PlacementPreviewClass != nullptr)
+		{
+			PreviewActor = SpawnActor(ItemData.PlacementPreviewClass, Owner.ActorLocation, FRotator());
+		}
+
+		if (PreviewActor == nullptr)
+		{
+			return;
+		}
+
+		PreviewActor.SetActorEnableCollision(false);
+		PreviewActor.SetActorTickEnabled(false);
+		ApplyGhostMaterial(PreviewActor);
+
+		if (HeldItem.GetHoldMode() == EBSHoldMode::Carry)
+		{
+			HeldItem.PhysicsCarry.Release();
+			HeldItem.HeldActor.SetActorHiddenInGame(true);
 		}
 		else
 		{
-			ActivatePlacement();
-		}
-	}
-
-	void ActivatePlacement()
-	{
-		if (SelectedSlot < 0 && InventorySlots.Num() > 0)
-		{
-			SelectedSlot = 0;
-		}
-
-		if (!IsValidSlot(SelectedSlot))
-		{
-			return;
+			HeldItem.DestroyDisplayMesh();
 		}
 
 		bActive = true;
-		SpawnPreview();
-	}
-
-	void DeactivatePlacement()
-	{
-		bActive = false;
-		DestroyPreview();
-	}
-
-	void SelectSlot(int SlotIndex)
-	{
-		if (!IsValidSlot(SlotIndex))
-		{
-			return;
-		}
-
-		SelectedSlot = SlotIndex;
-
-		if (bActive)
-		{
-			DestroyPreview();
-			SpawnPreview();
-		}
 	}
 
 	void UpdatePreview(FHitResult HitResult)
@@ -70,9 +56,9 @@ class UBSPlacementComponent : UActorComponent
 		PreviewActor.SetActorLocation(HitResult.ImpactPoint);
 	}
 
-	bool ConfirmPlacement()
+	bool ConfirmPlacement(UBSHeldItemComponent HeldItem)
 	{
-		if (PreviewActor == nullptr || !IsValidSlot(SelectedSlot))
+		if (PreviewActor == nullptr || HeldItem == nullptr || !HeldItem.IsHolding())
 		{
 			return false;
 		}
@@ -80,28 +66,35 @@ class UBSPlacementComponent : UActorComponent
 		FVector Location = PreviewActor.GetActorLocation();
 		FRotator Rotation = PreviewActor.GetActorRotation();
 
-		SpawnActor(InventorySlots[SelectedSlot], Location, Rotation);
+		HeldItem.PlaceAt(Location, Rotation);
 
 		DestroyPreview();
-		SpawnPreview();
+		bActive = false;
 		return true;
 	}
 
-	private void SpawnPreview()
+	void CancelPlacement(UBSHeldItemComponent HeldItem)
 	{
-		if (!IsValidSlot(SelectedSlot))
+		DestroyPreview();
+
+		if (HeldItem != nullptr && HeldItem.IsHolding())
 		{
-			return;
+			if (HeldItem.GetHoldMode() == EBSHoldMode::Carry)
+			{
+				HeldItem.HeldActor.SetActorHiddenInGame(false);
+				UPrimitiveComponent RootPrimitive = Cast<UPrimitiveComponent>(HeldItem.HeldActor.RootComponent);
+				if (RootPrimitive != nullptr)
+				{
+					HeldItem.PhysicsCarry.Grab(RootPrimitive);
+				}
+			}
+			else
+			{
+				HeldItem.CreateDisplayMesh();
+			}
 		}
 
-		PreviewActor = Cast<ABSSentry>(SpawnActor(InventorySlots[SelectedSlot], Owner.GetActorLocation(), FRotator()));
-		if (PreviewActor == nullptr)
-		{
-			return;
-		}
-
-		PreviewActor.SetActorEnableCollision(false);
-		ApplyGhostMaterial();
+		bActive = false;
 	}
 
 	private void DestroyPreview()
@@ -113,21 +106,22 @@ class UBSPlacementComponent : UActorComponent
 		}
 	}
 
-	private void ApplyGhostMaterial()
+	private void ApplyGhostMaterial(AActor Actor)
 	{
-		if (PreviewActor == nullptr || GhostMaterial == nullptr)
+		if (GhostMaterial == nullptr)
 		{
 			return;
 		}
 
-		PreviewActor.Base.SetMaterial(0, GhostMaterial);
-		PreviewActor.Rotator01.SetMaterial(0, GhostMaterial);
-		PreviewActor.Rotator02.SetMaterial(0, GhostMaterial);
-		//PreviewActor.Body.SetMaterial(0, GhostMaterial);
-	}
+		TArray<UStaticMeshComponent> MeshComponents;
+		Actor.GetComponentsByClass(MeshComponents);
 
-	private bool IsValidSlot(int SlotIndex)
-	{
-		return SlotIndex >= 0 && SlotIndex < InventorySlots.Num() && InventorySlots[SlotIndex] != nullptr;
+		for (UStaticMeshComponent MeshComponent : MeshComponents)
+		{
+			for (int MaterialIndex = 0; MaterialIndex < MeshComponent.GetNumMaterials(); MaterialIndex++)
+			{
+				MeshComponent.SetMaterial(MaterialIndex, GhostMaterial);
+			}
+		}
 	}
 }

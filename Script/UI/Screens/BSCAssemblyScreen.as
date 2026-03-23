@@ -22,6 +22,7 @@ class UBSAssemblyScreen : UBSMMScreen
 	UFUNCTION(BlueprintOverride)
 	void Tick(FGeometry MyGeometry, float InDeltaTime)
 	{
+		Super::Tick(MyGeometry, InDeltaTime);
 		if (OwningWorkbench == nullptr)
 		{
 			return;

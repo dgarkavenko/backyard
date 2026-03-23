@@ -5,6 +5,9 @@ class UBSInteractable : UActorComponent
 	UPROPERTY(EditAnywhere, Category = "Interaction")
 	UBSInteractionActionSet ActionSet;
 
+	UPROPERTY(EditAnywhere, Category = "Interaction")
+	UBSItemData ItemData;
+
 	UPROPERTY(Category = "Interaction")
 	FBSInteractionDelegate OnActionExecuted;
 
