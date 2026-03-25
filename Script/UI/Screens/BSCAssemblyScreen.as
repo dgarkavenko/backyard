@@ -6,6 +6,7 @@ class UBSAssemblyScreen : UBSMMScreen
 	int SelectedChassisIndex = -1;
 	int SelectedLoadoutIndex = -1;
 	bool bConfigurationDirty = false;
+	bool bInitialized = false;
 
 	const FLinearColor SelectedColor = FLinearColor(0.15f, 0.4f, 0.15f);
 	const FLinearColor HeaderColor = FLinearColor(0.6f, 0.6f, 0.6f);
@@ -22,10 +23,18 @@ class UBSAssemblyScreen : UBSMMScreen
 	UFUNCTION(BlueprintOverride)
 	void Tick(FGeometry MyGeometry, float InDeltaTime)
 	{
-		//Super::Tick(MyGeometry, InDeltaTime);
 		if (OwningWorkbench == nullptr)
 		{
 			return;
+		}
+
+		if (!bInitialized)
+		{
+			bInitialized = true;
+			if (OwningWorkbench.HasSentry())
+			{
+				InitializeFromSentry();
+			}
 		}
 
 		if (bConfigurationDirty)
@@ -47,15 +56,33 @@ class UBSAssemblyScreen : UBSMMScreen
 				mm::Text("SENTRY WORKBENCH", 28, FLinearColor::White, false, true);
 				mm::Spacer(15.0f);
 
-				DrawChassisSection();
-
-				if (SelectedChassisIndex >= 0)
+				if (!OwningWorkbench.HasSentry())
 				{
-					mm::Spacer(10.0f);
-					DrawLoadoutSection();
+					if (mm::Button("CRAFT NEW"))
+					{
+						OwningWorkbench.CraftNewSentry();
+						InitializeFromSentry();
+					}
+				}
+				else
+				{
+					DrawChassisSection();
+
+					if (SelectedChassisIndex >= 0)
+					{
+						mm::Spacer(10.0f);
+						DrawLoadoutSection();
+					}
+
+					mm::Spacer(30.0f);
+					if (mm::Button("TAKE SENTRY"))
+					{
+						OwningWorkbench.TakeSentry();
+						return;
+					}
 				}
 
-				mm::Spacer(30.0f);
+				mm::Spacer(10.0f);
 				if (mm::Button("CLOSE"))
 				{
 					DeactivateWidget();
@@ -71,6 +98,49 @@ class UBSAssemblyScreen : UBSMMScreen
 		mm::EndHorizontalBox();
 
 		mm::EndDraw();
+	}
+
+	private void InitializeFromSentry()
+	{
+		SelectedChassisIndex = -1;
+		SelectedLoadoutIndex = -1;
+
+		if (OwningWorkbench == nullptr || !OwningWorkbench.HasSentry())
+		{
+			return;
+		}
+
+		ABSSentry Sentry = OwningWorkbench.Sentry;
+		if (Sentry.Configuration == nullptr)
+		{
+			return;
+		}
+
+		UBSChassisConfiguration CurrentChassis = Sentry.Configuration.Chassis;
+		if (CurrentChassis != nullptr)
+		{
+			for (int Index = 0; Index < OwningWorkbench.AvailableChassis.Num(); Index++)
+			{
+				if (OwningWorkbench.AvailableChassis[Index] == CurrentChassis)
+				{
+					SelectedChassisIndex = Index;
+					break;
+				}
+			}
+		}
+
+		UBSSentryLoadout CurrentLoadout = Sentry.Configuration.Loadout;
+		if (CurrentLoadout != nullptr)
+		{
+			for (int Index = 0; Index < OwningWorkbench.AvailableLoadouts.Num(); Index++)
+			{
+				if (OwningWorkbench.AvailableLoadouts[Index] == CurrentLoadout)
+				{
+					SelectedLoadoutIndex = Index;
+					break;
+				}
+			}
+		}
 	}
 
 	private void DrawChassisSection()

@@ -174,6 +174,7 @@ class ABSSentry : AActor
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()
 	{
+		Base.SetGenerateOverlapEvents(true);
 		CacheGeometry();
 	}
 
@@ -206,6 +207,16 @@ class ABSSentry : AActor
 			FVector MuzzleForwardWorld = MuzzleSocketWorld.Rotation.ForwardVector;
 			MuzzleForwardRotation = Rotator02.WorldTransform.InverseTransformVector(MuzzleForwardWorld).Rotation();
 		}
+	}
+
+	void DisableWorldInteractions()
+	{
+		Base.SetCollisionResponseToChannel(ECollisionChannel::ECC_GameTraceChannel2, ECollisionResponse::ECR_Ignore);
+	}
+
+	void EnableWorldInteractions()
+	{
+		Base.SetCollisionResponseToChannel(ECollisionChannel::ECC_GameTraceChannel2, ECollisionResponse::ECR_Block);
 	}
 
 	UFUNCTION(BlueprintCallable, Category = "Sentry")
