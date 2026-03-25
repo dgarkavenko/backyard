@@ -1,9 +1,3 @@
-enum EBSPlacementSource
-{
-	HeldItem,
-	DraggedItem
-}
-
 struct FSBInteractionState
 {
 	EBSInteractStage Stage = EBSInteractStage::Pending;
@@ -28,9 +22,6 @@ class ABSPlayerController : ABFPlayerController
 	UInputAction PrimaryAction;
 
 	UPROPERTY(Category = "Input")
-	UInputAction CancelAction;
-
-	UPROPERTY(Category = "Input")
 	UInputAction InteractAction_Down;
 
 	UPROPERTY(Category = "Input")
@@ -41,8 +32,6 @@ class ABSPlayerController : ABFPlayerController
 
 	FBSInteractionPromptInfo CurrentPromptInfo;
 	FSBInteractionState InteractionState;
-
-	EBSPlacementSource PlacementSource;
 
 	UBSItemData CachedHeldItemData;
 	bool bCachedDragging = false;
@@ -107,7 +96,6 @@ class ABSPlayerController : ABFPlayerController
 		EnhancedInputComponent.BindAction(InteractAction_Down, ETriggerEvent::Completed, FEnhancedInputActionHandlerDynamicSignature(this, n"InteractionDownReleased"));
 		
 		EnhancedInputComponent.BindAction(PrimaryAction, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_Primary"));
-		EnhancedInputComponent.BindAction(CancelAction, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_Cancel"));
 		EnhancedInputComponent.BindAction(ShowDebugAction, ETriggerEvent::Completed, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_ShowDebug"));
 	}
 
@@ -216,31 +204,6 @@ class ABSPlayerController : ABFPlayerController
 			return;
 		}
 
-		if (Character.PlacementComponent.bActive)
-		{
-			FVector Location;
-			FRotator Rotation;
-			if (Character.PlacementComponent.ConfirmPlacement(Location, Rotation))
-			{
-				Character.HeldItemComponent.PlaceAt(Location, Rotation);
-			}
-			bPromptDirty = true;
-			return;
-		}
-
-		if (Character.HeldItemComponent.IsHolding())
-		{
-			UBSItemData HeldData = Character.HeldItemComponent.HeldItemData;
-			if (HeldData != nullptr && HeldData.bPlaceable)
-			{
-				Character.HeldItemComponent.HideForPlacement();
-				Character.PlacementComponent.ActivatePlacement(HeldData);
-				PlacementSource = EBSPlacementSource::HeldItem;
-				bPromptDirty = true;
-				return;
-			}
-		}
-
 		UBSInteractionRegistry Focused = InteractorComponent.FocusedInteractable;
 		if (Focused != nullptr)
 		{
@@ -264,14 +227,7 @@ class ABSPlayerController : ABFPlayerController
 		if (Character == nullptr)
 		{
 			return;
-		}
-
-		if (Character.PlacementComponent.bActive)
-		{
-			Character.PlacementComponent.CancelPlacement();
-			RestorePlacementSource(Character);
-			bPromptDirty = true;
-		}
+		}	
 	}
 
 	UFUNCTION()
@@ -288,11 +244,6 @@ class ABSPlayerController : ABFPlayerController
 			Resolved.Action.Delegate.ExecuteIfBound(Interactor);
 			bPromptDirty = true;
 		}
-	}
-
-	void RestorePlacementSource(ABSCharacter Character)
-	{
-		Character.HeldItemComponent.RestoreFromPlacement();
 	}
 
 	void SpawnPrimaryActor(ABSCharacter Character)
@@ -316,41 +267,25 @@ class ABSPlayerController : ABFPlayerController
 
 	void UpdateDirtyState(ABSCharacter Character)
 	{
-		UBSItemData CurrentHeldData = Character.HeldItemComponent.HeldItemData;
 		bool bCurrentDragging = Character.DragComponent.IsDragging();
-		bool bCurrentPlacement = Character.PlacementComponent.bActive;
 
-		if (CurrentHeldData != CachedHeldItemData
-			|| bCurrentDragging != bCachedDragging
-			|| bCurrentPlacement != bCachedPlacementActive)
+		if (bCurrentDragging != bCachedDragging)
 		{
-			CachedHeldItemData = CurrentHeldData;
 			bCachedDragging = bCurrentDragging;
-			bCachedPlacementActive = bCurrentPlacement;
 			bPromptDirty = true;
 		}
 	}
 
 	void RecomputePrompt(ABSCharacter Character)
 	{
-		if (Character.PlacementComponent.bActive)
-		{
-			CurrentPromptInfo = FBSInteractionPromptInfo();
-			CurrentPromptInfo.bAvailable = true;
-			CurrentPromptInfo.DisplayName = FText::FromString("[LMB] Place  [RMB] Cancel");
-			CurrentPromptInfo.Icon = EBSInteractionIcon::Interact;
-			return;
-		}
-
 		UBSInteractionRegistry Focused = InteractorComponent.FocusedInteractable;
 		if (Focused != nullptr)
 		{
 			FGameplayTagContainer InteractorTags = Character.GetCombinedInteractorTags();
-			bool bIsHoldingTool = Character.HeldItemComponent.IsHolding();
 			bool bIsDragging = Character.DragComponent.IsDragging();
-			CurrentPromptInfo = BSInteraction::BuildPromptInfo(Focused, InteractorTags, bIsHoldingTool, bIsDragging);
+			CurrentPromptInfo = BSInteraction::BuildPromptInfo(Focused, InteractorTags, bIsDragging);
 		}
-		else if (Character.DragComponent.IsDragging() || Character.HeldItemComponent.IsHolding())
+		else if (Character.DragComponent.IsDragging())
 		{
 			CurrentPromptInfo = FBSInteractionPromptInfo();
 			CurrentPromptInfo.bAvailable = true;

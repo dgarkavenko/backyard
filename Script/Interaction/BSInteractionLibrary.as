@@ -136,7 +136,7 @@ namespace BSInteraction
 		return Result;
 	}
 
-	FBSInteractionPromptInfo BuildPromptInfo(UBSInteractionRegistry Interactable, FGameplayTagContainer InteractorTags, bool bIsHoldingTool, bool bIsDragging)
+	FBSInteractionPromptInfo BuildPromptInfo(UBSInteractionRegistry Interactable, FGameplayTagContainer InteractorTags, bool bIsDragging)
 	{
 		FBSInteractionPromptInfo Info;
 
@@ -148,13 +148,13 @@ namespace BSInteraction
 		FBSResolvedAction InstantAction = ResolveInstantAction(Interactable, InteractorTags);
 		FBSResolvedAction HoldAction = ResolveHoldAction(Interactable, InteractorTags);
 
-		bool bIsPickup = UBSPickupInteraction::Get(Interactable.Owner) != nullptr;
+		bool bIsPickup = UBSDragInteraction::Get(Interactable.Owner) != nullptr;
 
 		if (InstantAction.bValid)
 		{
 			Info.bAvailable = true;
 
-			bool bWouldSwap = bIsPickup && (bIsHoldingTool || bIsDragging);
+			bool bWouldSwap = bIsPickup && (bIsDragging);
 
 			if (bWouldSwap)
 			{

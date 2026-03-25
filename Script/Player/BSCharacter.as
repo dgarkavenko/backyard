@@ -12,16 +12,10 @@ class ABSCharacter : ACharacter
 	USpotLightComponent SpotLight;
 
 	UPROPERTY(DefaultComponent)
-	UBSHeldItemComponent HeldItemComponent;
-
-	UPROPERTY(DefaultComponent)
 	UBFPhysicsCarryComponent PhysicsCarry;
 
 	UPROPERTY(DefaultComponent)
 	UBSDragComponent DragComponent;
-
-	UPROPERTY(DefaultComponent)
-	UBSPlacementComponent PlacementComponent;
 
 	UPROPERTY(DefaultComponent)
 	UBSCharacterInputComponent CharacterInputComponent;
@@ -118,9 +112,7 @@ class ABSCharacter : ACharacter
 
 	FGameplayTagContainer GetCombinedInteractorTags()
 	{
-		FGameplayTagContainer Combined = HeldItemComponent.GetGrantedTags();
-		Combined.AppendTags(StateTags);
-		return Combined;
+		return StateTags;
 	}
 
 	bool TryResolveCharacterAction()
@@ -130,11 +122,7 @@ class ABSCharacter : ACharacter
 			DragComponent.StopDrag();
 			return true;
 		}
-		if (HeldItemComponent.IsHolding())
-		{
-			HeldItemComponent.Drop();
-			return true;
-		}
+
 		return false;
 	}
 }

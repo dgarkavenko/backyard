@@ -1,5 +1,43 @@
 event void FBSBoolDelegate(bool bIsDragging);
 
+enum EBSDragDistance
+{
+	KeepOriginal,
+	KeepClose,
+	KeepSetDistance,	
+}
+
+enum EBSDragStabilize
+{
+	KeepOriginal,
+	KeepUpwards,
+	Free
+}
+
+struct FBSDragParams
+{
+	UPROPERTY()
+	EBSDragDistance DragDistanceMode = EBSDragDistance::KeepSetDistance;
+
+	UPROPERTY()
+	EBSDragStabilize DragStabilizeMode = EBSDragStabilize::KeepOriginal;
+
+	UPROPERTY()
+	float DragDistance = 200.0f;
+
+	UPROPERTY()	
+	float LinearStiffness = 350.0f;
+
+	UPROPERTY()	
+	float LinearDamping = 100.0f;
+
+	UPROPERTY()	
+	float AngularStiffness = 450.0f;
+
+	UPROPERTY()	
+	float AngularDamping = 100.0f;
+}
+
 class UBSDragComponent : UActorComponent
 {
 	default PrimaryComponentTick.bStartWithTickEnabled = false;
@@ -10,26 +48,19 @@ class UBSDragComponent : UActorComponent
 	UPROPERTY(EditAnywhere, Category = "Drag|Input")
 	UInputAction DragRotateAction;
 
-	UPROPERTY(EditAnywhere, Category = "Drag|Input", meta = (ClampMin = "0", ClampMax = "720", Units = "Rad"))
+	UPROPERTY(EditAnywhere, Category = "Drag|Input", meta = (ClampMin = "0", ClampMax = "30", Units = "Rad"))
 	float RotateSpeed = Math::DegreesToRadians(180.0f);
-
-	UPROPERTY(EditAnywhere, Category = "Drag|Physics", meta = (ClampMin = "50", ClampMax = "500", Units = "cm"))
-	float DragDistance = 200.0f;
-
-	UPROPERTY(EditAnywhere, Category = "Drag|Physics")
-	float GrabLinearStiffness = 350.0f;
-
-	UPROPERTY(EditAnywhere, Category = "Drag|Physics")
-	float GrabLinearDamping = 100.0f;
 
 	UBFPhysicsCarryComponent PhysicsCarry;
 	AActor DraggedActor;
 
-	float DragYawOffset = 0.0f;
 	FQuat RotationOnStart;
-
-	bool bStabilize = true;
-
+	FQuat FreeRotation;
+	float DragYawOffset = 0.0f;
+	
+	float DragDistance = 200;
+	EBSDragStabilize StabilizeMode;
+	
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()
 	{
@@ -48,7 +79,7 @@ class UBSDragComponent : UActorComponent
 		return DraggedActor != nullptr;
 	}
 
-	void StartDrag(AActor TargetActor)
+	void StartDrag(AActor TargetActor, FBSDragParams InDragParams = FBSDragParams())
 	{
 		if (TargetActor == nullptr)
 		{
@@ -77,20 +108,39 @@ class UBSDragComponent : UActorComponent
 		RootPrimitive.SetSimulatePhysics(true);
 		RootPrimitive.SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Ignore);
 
-		PhysicsCarry.CarryDistance = DragDistance;
-		PhysicsCarry.LinearStiffness = GrabLinearStiffness;
-		PhysicsCarry.LinearDamping = GrabLinearDamping;
-		PhysicsCarry.AngularStiffness = 450.0f;
-		PhysicsCarry.AngularDamping = 100.0f;
+		switch (InDragParams.DragDistanceMode)
+		{
+			case EBSDragDistance::KeepSetDistance:
+				DragDistance = InDragParams.DragDistance;
+				break;
+			case EBSDragDistance::KeepOriginal:
+				DragDistance = InDragParams.DragDistance;
+				break;
+			case EBSDragDistance::KeepClose:
+			{
+				FVector ActorOrigin;
+				FVector ActorExtent;				
+				TargetActor.GetActorBounds(true, ActorOrigin, ActorExtent);
+				DragDistance = ActorExtent.Size();			
+				break;
+			}
+
+		}
+
+		PhysicsCarry.LinearStiffness = InDragParams.LinearStiffness;
+		PhysicsCarry.LinearDamping = InDragParams.LinearDamping;
+		PhysicsCarry.AngularStiffness = InDragParams.AngularStiffness;
+		PhysicsCarry.AngularDamping = InDragParams.AngularDamping;
 		PhysicsCarry.Grab(RootPrimitive);
 
-		if (bStabilize)
+		StabilizeMode = InDragParams.DragStabilizeMode;
+		
+		if (StabilizeMode == EBSDragStabilize::KeepUpwards)
 		{
 			FRotator UpwardsRotation = RootPrimitive.WorldRotation;
 			UpwardsRotation.Pitch = UpwardsRotation.Roll = 0;
 			RotationOnStart = UpwardsRotation.Quaternion();
 			PhysicsCarry.UpdateTargetRotation(UpwardsRotation);
-
 		}					
 		else
 		{
@@ -135,13 +185,24 @@ class UBSDragComponent : UActorComponent
 
 	UFUNCTION()
 	void Rotate(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
-	{
+	{		
 		if (DraggedActor != nullptr)
 		{
 			float AxisValue = ActionValue.GetAxis1D();
-			DragYawOffset += AxisValue * RotateSpeed * Gameplay::GetWorldDeltaSeconds();
-			FQuat DeltaRotation = FQuat(FVector::UpVector, DragYawOffset);
-			PhysicsCarry.UpdateTargetRotation((DeltaRotation * RotationOnStart).Rotator());			
+			float Delta = AxisValue * RotateSpeed * Gameplay::GetWorldDeltaSeconds();
+
+			if (StabilizeMode == EBSDragStabilize::Free)
+			{
+				FQuat DeltaRotation = FQuat(FVector::UpVector, Delta);
+				FreeRotation = DeltaRotation * DraggedActor.ActorQuat;
+				PhysicsCarry.UpdateTargetRotation(FreeRotation.Rotator());
+			}
+			else
+			{
+				DragYawOffset += Delta;
+				FQuat DeltaRotation = FQuat(FVector::UpVector, DragYawOffset);
+				PhysicsCarry.UpdateTargetRotation((DeltaRotation * RotationOnStart).Rotator());
+			}			
 		}		
 	}
 
@@ -205,6 +266,10 @@ class UBSDragComponent : UActorComponent
 		FVector TargetLocation = Camera.WorldLocation + Camera.ForwardVector * DragDistance;
 		PhysicsCarry.UpdateTarget(TargetLocation);
 
-
+		if (StabilizeMode == EBSDragStabilize::Free)
+		{
+			FreeRotation = FQuat::FastLerp(FreeRotation, DraggedActor.ActorQuat, DeltaSeconds * 2);
+			PhysicsCarry.UpdateTargetRotation(FreeRotation.Rotator());
+		}
 	}
 }

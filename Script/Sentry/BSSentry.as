@@ -7,10 +7,10 @@ class ABSSentry : AActor
 	UBSTerminalInteraction TerminalInteraction;
 	
 	UPROPERTY(DefaultComponent)
-	UBSPickupInteraction PickupInteraction;
+	UBSDragInteraction DragInteraction;
 
-	default PickupInteraction.Mode = EBSPickupMode::Drag;
-	default PickupInteraction.Action.HoldDuration = 1.0f; 
+	default DragInteraction.Action.HoldDuration = 1.0f;
+	default DragInteraction.ActionParams.DragStabilizeMode = EBSDragStabilize::KeepUpwards;
 
 	UPROPERTY(DefaultComponent, RootComponent)
 	UStaticMeshComponent Base;
