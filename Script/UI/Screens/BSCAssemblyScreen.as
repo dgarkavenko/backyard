@@ -73,13 +73,6 @@ class UBSAssemblyScreen : UBSMMScreen
 						mm::Spacer(10.0f);
 						DrawLoadoutSection();
 					}
-
-					mm::Spacer(30.0f);
-					if (mm::Button("TAKE SENTRY"))
-					{
-						OwningWorkbench.TakeSentry();
-						return;
-					}
 				}
 
 				mm::Spacer(10.0f);

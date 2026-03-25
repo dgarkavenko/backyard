@@ -33,9 +33,6 @@ class ABSAssemblyBench : AActor
 	UPROPERTY(EditAnywhere, Category = "Workbench|Snap", meta = (ClampMin = "10", ClampMax = "300", Units = "cm"))
 	float SnapZoneRadius = 75.0f;
 
-	UPROPERTY(EditAnywhere, Category = "Workbench|Snap")
-	FVector SentryDismountOffset = FVector(150.0f, 0.0f, 0.0f);
-
 	ABSSentry Sentry;
 	ABSSentry PendingSentry;
 	APlayerController ActiveUser;
@@ -166,7 +163,7 @@ class ABSAssemblyBench : AActor
 		}
 
 		Sentry.SetActorTickEnabled(false);
-		Sentry.DisableWorldInteractions();
+		Sentry.DisableTerminalInteraction();
 
 		if (SentryMaterial != nullptr)
 		{
@@ -191,8 +188,7 @@ class ABSAssemblyBench : AActor
 		ABSSentry Dismounted = Sentry;
 		Sentry = nullptr;
 
-		Dismounted.EnableWorldInteractions();
-		Dismounted.SetActorTickEnabled(true);
+		Dismounted.EnableTerminalInteraction();
 
 		return Dismounted;
 	}
@@ -214,20 +210,6 @@ class ABSAssemblyBench : AActor
 		}
 
 		MountSentry(NewSentry);
-	}
-
-	void TakeSentry()
-	{
-		ABSSentry Taken = UnmountSentry();
-		if (Taken == nullptr)
-		{
-			return;
-		}
-
-		FVector DismountWorld = ActorTransform.TransformPosition(SentryDismountOffset);
-		Taken.SetActorLocation(DismountWorld);
-
-		DeactivateWorkbench();
 	}
 
 	void UpdateSentryConfiguration(UBSChassisConfiguration Chassis, UBSSentryLoadout Loadout)
@@ -281,6 +263,11 @@ class ABSAssemblyBench : AActor
 		{
 			PendingSentry = nullptr;
 			System::ClearAndInvalidateTimerHandle(PendingSentryTimerHandle);
+		}
+
+		if (OtherActor == Sentry)
+		{
+			UnmountSentry();
 		}
 	}
 
