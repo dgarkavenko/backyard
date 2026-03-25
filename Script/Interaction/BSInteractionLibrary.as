@@ -1,77 +1,45 @@
+enum EBSInteractStage
+{
+	Pending,
+	Holding,
+	Completed
+}
+
 struct FBSFilteredAction
 {
-	FBSInteractionAction Action;
+	FBFInteraction Action;
 	bool bAvailable = false;
 }
 
 struct FBSResolvedAction
 {
-	FBSInteractionAction Action;
+	FBFInteraction Action;
 	bool bValid = false;
 }
 
 namespace BSInteraction
 {
-	UBSInteractable CheckHitForInteractable(FHitResult HitResult)
+	UBSInteractionRegistry CheckHitForInteractable(FHitResult HitResult)
 	{
 		AActor HitActor = HitResult.GetActor();
 		if (HitActor == nullptr)
 		{
 			return nullptr;
 		}
-		return UBSInteractable::Get(HitActor);
+		return UBSInteractionRegistry::Get(HitActor);
 	}
 
-	UBSInteractable TraceForInteractable(APlayerController PlayerController, float MaxDistance = 500.0f)
-	{
-		APawn ControlledPawn = PlayerController.GetControlledPawn();
-		if (ControlledPawn == nullptr)
-		{
-			return nullptr;
-		}
-
-		UCameraComponent Camera = UCameraComponent::Get(ControlledPawn);
-		if (Camera == nullptr)
-		{
-			return nullptr;
-		}
-
-		FVector Start = Camera.GetWorldLocation();
-		FVector End = Start + Camera.GetForwardVector() * MaxDistance;
-
-		TArray<AActor> IgnoredActors;
-		IgnoredActors.Add(ControlledPawn);
-
-		FHitResult HitResult;
-		bool bHit = System::LineTraceSingle(
-			Start,
-			End,
-			ETraceTypeQuery::TraceTypeQuery2,
-			false,
-			IgnoredActors,
-			EDrawDebugTrace::None,
-			HitResult,
-			true
-		);
-
-		if (!bHit)
-		{
-			return nullptr;
-		}
-
-		return UBSInteractable::Get(HitResult.GetActor());
-	}
-
-	TArray<FBSFilteredAction> GetFilteredActions(UBSInteractable Interactable, FGameplayTagContainer InteractorTags)
+	TArray<FBSFilteredAction> GetFilteredActions(UBSInteractionRegistry Interactable, FGameplayTagContainer InteractorTags)
 	{
 		TArray<FBSFilteredAction> FilteredActions;
 
-		if (Interactable == nullptr || Interactable.ActionSet == nullptr)
+		if (Interactable == nullptr)
 		{
 			return FilteredActions;
 		}
 
-		for (FBSInteractionAction Action : Interactable.ActionSet.Actions)
+		TArray<FBFInteraction> Actions = Interactable.GetActions();
+		for (FBFInteraction Action : Actions)
 		{
 			FBSFilteredAction Filtered;
 			Filtered.Action = Action;
@@ -82,45 +50,17 @@ namespace BSInteraction
 		return FilteredActions;
 	}
 
-	bool ExecuteAction(UBSInteractable Interactable, FGameplayTag ActionTag, AActor Interactor, FGameplayTagContainer InteractorTags)
-	{
-		if (Interactable == nullptr || Interactable.ActionSet == nullptr)
-		{
-			return false;
-		}
-
-		for (FBSInteractionAction Action : Interactable.ActionSet.Actions)
-		{
-			if (Action.ActionTag != ActionTag)
-			{
-				continue;
-			}
-
-			bool bAvailable = Action.RequiredTags.IsEmpty() || InteractorTags.HasAll(Action.RequiredTags);
-			if (!bAvailable)
-			{
-				return false;
-			}
-
-			Interactable.OnActionExecuted.Broadcast(ActionTag, Interactor);
-			return true;
-		}
-
-		return false;
-	}
-
-	// ── Resolution Functions ──
-
-	FBSResolvedAction ResolveInstantAction(UBSInteractable Interactable, FGameplayTagContainer InteractorTags)
+	FBSResolvedAction ResolveInstantAction(UBSInteractionRegistry Interactable, FGameplayTagContainer InteractorTags)
 	{
 		FBSResolvedAction Result;
 
-		if (Interactable == nullptr || Interactable.ActionSet == nullptr)
+		if (Interactable == nullptr)
 		{
 			return Result;
 		}
 
-		for (FBSInteractionAction Action : Interactable.ActionSet.Actions)
+		TArray<FBFInteraction> Actions = Interactable.GetActions();
+		for (FBFInteraction Action : Actions)
 		{
 			if (Action.HoldDuration > 0.0f)
 			{
@@ -139,16 +79,17 @@ namespace BSInteraction
 		return Result;
 	}
 
-	FBSResolvedAction ResolveHoldAction(UBSInteractable Interactable, FGameplayTagContainer InteractorTags)
+	FBSResolvedAction ResolveHoldAction(UBSInteractionRegistry Interactable, FGameplayTagContainer InteractorTags)
 	{
 		FBSResolvedAction Result;
 
-		if (Interactable == nullptr || Interactable.ActionSet == nullptr)
+		if (Interactable == nullptr)
 		{
 			return Result;
 		}
 
-		for (FBSInteractionAction Action : Interactable.ActionSet.Actions)
+		TArray<FBFInteraction> Actions = Interactable.GetActions();
+		for (FBFInteraction Action : Actions)
 		{
 			if (Action.HoldDuration <= 0.0f)
 			{
@@ -167,16 +108,17 @@ namespace BSInteraction
 		return Result;
 	}
 
-	FBSResolvedAction ResolveToolAction(UBSInteractable Interactable, FGameplayTagContainer InteractorTags)
+	FBSResolvedAction ResolveToolAction(UBSInteractionRegistry Interactable, FGameplayTagContainer InteractorTags)
 	{
 		FBSResolvedAction Result;
 
-		if (Interactable == nullptr || Interactable.ActionSet == nullptr)
+		if (Interactable == nullptr)
 		{
 			return Result;
 		}
 
-		for (FBSInteractionAction Action : Interactable.ActionSet.Actions)
+		TArray<FBFInteraction> Actions = Interactable.GetActions();
+		for (FBFInteraction Action : Actions)
 		{
 			if (Action.RequiredTags.IsEmpty())
 			{
@@ -194,11 +136,11 @@ namespace BSInteraction
 		return Result;
 	}
 
-	FBSInteractionPromptInfo BuildPromptInfo(UBSInteractable Interactable, FGameplayTagContainer InteractorTags, bool bIsHolding)
+	FBSInteractionPromptInfo BuildPromptInfo(UBSInteractionRegistry Interactable, FGameplayTagContainer InteractorTags, bool bIsHoldingTool, bool bIsDragging)
 	{
 		FBSInteractionPromptInfo Info;
 
-		if (Interactable == nullptr || Interactable.ActionSet == nullptr)
+		if (Interactable == nullptr)
 		{
 			return Info;
 		}
@@ -206,16 +148,20 @@ namespace BSInteraction
 		FBSResolvedAction InstantAction = ResolveInstantAction(Interactable, InteractorTags);
 		FBSResolvedAction HoldAction = ResolveHoldAction(Interactable, InteractorTags);
 
+		bool bIsPickup = UBSPickupInteraction::Get(Interactable.Owner) != nullptr;
+
 		if (InstantAction.bValid)
 		{
 			Info.bAvailable = true;
 
-			if (bIsHolding && InstantAction.Action.Outcome == EBSActionOutcome::PickupTarget)
+			bool bWouldSwap = bIsPickup && (bIsHoldingTool || bIsDragging);
+
+			if (bWouldSwap)
 			{
 				Info.DisplayName = FText::FromString("[E] Swap");
 				Info.Icon = EBSInteractionIcon::Pickup;
 			}
-			else if (InstantAction.Action.Outcome == EBSActionOutcome::PickupTarget)
+			else if (bIsPickup)
 			{
 				Info.DisplayName = FText::FromString("[E] " + InstantAction.Action.DisplayName.ToString());
 				Info.Icon = EBSInteractionIcon::Pickup;
@@ -236,9 +182,7 @@ namespace BSInteraction
 			if (!InstantAction.bValid)
 			{
 				Info.DisplayName = FText::FromString("[Hold E] " + HoldAction.Action.DisplayName.ToString());
-				Info.Icon = HoldAction.Action.Outcome == EBSActionOutcome::PickupTarget
-					? EBSInteractionIcon::Pickup
-					: EBSInteractionIcon::Interact;
+				Info.Icon = bIsPickup ? EBSInteractionIcon::Pickup : EBSInteractionIcon::Interact;
 			}
 		}
 

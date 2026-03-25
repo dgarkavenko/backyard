@@ -1,5 +1,4 @@
-event void FSUpdateSprintMeterDelegate(float Percentage);
-event void FSSprintStateChangedDelegate(bool bIsSprinting);
+event void FBSStateTagsChangedDelegate(FGameplayTagContainer StateTags);
 
 class ABSCharacter : ACharacter
 {
@@ -13,10 +12,13 @@ class ABSCharacter : ACharacter
 	USpotLightComponent SpotLight;
 
 	UPROPERTY(DefaultComponent)
-	USphereComponent InteractionSphere;
+	UBSHeldItemComponent HeldItemComponent;
 
 	UPROPERTY(DefaultComponent)
-	UBSHeldItemComponent HeldItemComponent;
+	UBFPhysicsCarryComponent PhysicsCarry;
+
+	UPROPERTY(DefaultComponent)
+	UBSDragComponent DragComponent;
 
 	UPROPERTY(DefaultComponent)
 	UBSPlacementComponent PlacementComponent;
@@ -24,44 +26,20 @@ class ABSCharacter : ACharacter
 	UPROPERTY(DefaultComponent)
 	UBSCharacterInputComponent CharacterInputComponent;
 
-	UPROPERTY(EditAnywhere, Category = "Interaction", meta = (ClampMin = "50", ClampMax = "1000", Units = "cm"))
-	float InteractionAwarenessRadius = 300.0f;
-
-	UPROPERTY(EditAnywhere, Category = "Interaction", meta = (ClampMin = "100", ClampMax = "5000", Units = "cm"))
-	float CameraTraceDistance = 1000.0f;
+	UPROPERTY(DefaultComponent)
+	UBSInteractionTraceComponent InteractorComponent;
+	default InteractorComponent.InteractionCastOrigin = Camera;
 
 	UPROPERTY(EditAnywhere, Category = "Walk")
 	float WalkSpeed = 250.0f;
 
-	UPROPERTY(EditAnywhere, Category = "Sprint", meta = (ClampMin = "0", ClampMax = "1"))
-	float SprintFixedTickTime = 0.03333f;
-
-	UPROPERTY(EditAnywhere, Category = "Sprint", meta = (ClampMin = "0", ClampMax = "10"))
-	float SprintTime = 3.0f;
-
 	UPROPERTY(EditAnywhere, Category = "Sprint", meta = (ClampMin = "0"))
 	float SprintSpeed = 600.0f;
 
-	UPROPERTY(EditAnywhere, Category = "Recovery", meta = (ClampMin = "0"))
-	float RecoveringWalkSpeed = 150.0f;
-
-	UPROPERTY(EditAnywhere, Category = "Recovery", meta = (ClampMin = "0", ClampMax = "10"))
-	float RecoveryTime = 0.0f;
+	FGameplayTagContainer StateTags;
 
 	UPROPERTY(Category = "Delegates")
-	FSUpdateSprintMeterDelegate OnSprintMeterUpdated;
-
-	UPROPERTY(Category = "Delegates")
-	FSSprintStateChangedDelegate OnSprintStateChanged;
-
-	bool bSprinting = false;
-	bool bRecovering = false;
-	float SprintMeter = 0.0f;
-	FTimerHandle SprintTimer;
-	TArray<UBSInteractable> NearbyInteractables;
-	FHitResult CameraTraceResult;
-	bool bCameraTraceHit = false;
-	UBSInteractable FocusedInteractable;
+	FBSStateTagsChangedDelegate OnStateTagsChanged;
 
 	default Camera.RelativeLocation = FVector(-2.8f, 5.89f, 0.0f);
 	default Camera.RelativeRotation = FRotator(0.0f, 90.0f, -90.0f);
@@ -87,9 +65,6 @@ class ABSCharacter : ACharacter
 	default FirstPersonMesh.bOnlyOwnerSee = true;
 	default FirstPersonMesh.SetCollisionProfileName(n"NoCollision");
 
-	default InteractionSphere.SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	default InteractionSphere.SetGenerateOverlapEvents(true);
-
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()
 	{
@@ -110,124 +85,56 @@ class ABSCharacter : ACharacter
 
 		SpotLight.SetIntensityUnits(ELightUnits::Lumens);
 
-		InteractionSphere.SetSphereRadius(InteractionAwarenessRadius);
-		InteractionSphere.OnComponentBeginOverlap.AddUFunction(this, n"OnInteractionSphereBeginOverlap");
-		InteractionSphere.OnComponentEndOverlap.AddUFunction(this, n"OnInteractionSphereEndOverlap");
-
-		SprintMeter = SprintTime;
 		CharacterMovement.MaxWalkSpeed = WalkSpeed;
-
-		SprintTimer = System::SetTimer(this, n"SprintFixedTick", SprintFixedTickTime, bLooping = true);
-	}
-
-	UFUNCTION(BlueprintOverride)
-	void EndPlay(EEndPlayReason EndPlayReason)
-	{
-		System::ClearAndInvalidateTimerHandle(SprintTimer);
 	}
 
 	void StartSprint()
 	{
-		bSprinting = true;
-
-		if (!bRecovering)
-		{
-			CharacterMovement.MaxWalkSpeed = SprintSpeed;
-			OnSprintStateChanged.Broadcast(true);
-		}
+		CharacterMovement.MaxWalkSpeed = SprintSpeed;		
 	}
 
 	void StopSprint()
 	{
-		bSprinting = false;
+		CharacterMovement.MaxWalkSpeed = WalkSpeed;
+	}
 
-		if (!bRecovering)
+	void AddStateTag(FGameplayTag Tag)
+	{
+		if (!StateTags.HasTag(Tag))
 		{
-			CharacterMovement.MaxWalkSpeed = WalkSpeed;
-			OnSprintStateChanged.Broadcast(false);
+			StateTags.AddTag(Tag);
+			OnStateTagsChanged.Broadcast(StateTags);
 		}
 	}
 
-	UFUNCTION(BlueprintOverride)
-	void Tick(float DeltaSeconds)
+	void RemoveStateTag(FGameplayTag Tag)
 	{
-		FVector Start = Camera.GetWorldLocation();
-		FVector End = Start + Camera.GetForwardVector() * CameraTraceDistance;
-
-		TArray<AActor> IgnoredActors;
-		IgnoredActors.Add(this);
-
-		bCameraTraceHit = System::LineTraceSingle(
-			Start,
-			End,
-			ETraceTypeQuery::TraceTypeQuery2,
-			false,
-			IgnoredActors,
-			EDrawDebugTrace::None,
-			CameraTraceResult,
-			true
-		);
-
-		FocusedInteractable = bCameraTraceHit ? BSInteraction::CheckHitForInteractable(CameraTraceResult) : nullptr;
-	}
-
-	// ── Interaction Awareness ──
-
-	UFUNCTION()
-	void OnInteractionSphereBeginOverlap(
-		UPrimitiveComponent OverlappedComponent, AActor OtherActor,
-		UPrimitiveComponent OtherComponent, int OtherBodyIndex,
-		bool bFromSweep, const FHitResult&in Hit)
-	{
-		UBSInteractable Interactable = UBSInteractable::Get(OtherActor);
-		if (Interactable != nullptr && !NearbyInteractables.Contains(Interactable))
+		if (StateTags.HasTag(Tag))
 		{
-			NearbyInteractables.Add(Interactable);
+			StateTags.RemoveTag(Tag);
+			OnStateTagsChanged.Broadcast(StateTags);
 		}
 	}
 
-	UFUNCTION()
-	void OnInteractionSphereEndOverlap(
-		UPrimitiveComponent OverlappedComponent, AActor OtherActor,
-		UPrimitiveComponent OtherComponent, int OtherBodyIndex)
+	FGameplayTagContainer GetCombinedInteractorTags()
 	{
-		UBSInteractable Interactable = UBSInteractable::Get(OtherActor);
-		if (Interactable != nullptr)
-		{
-			NearbyInteractables.Remove(Interactable);
-		}
+		FGameplayTagContainer Combined = HeldItemComponent.GetGrantedTags();
+		Combined.AppendTags(StateTags);
+		return Combined;
 	}
 
-	// ── Stamina System ──
-
-	UFUNCTION()
-	void SprintFixedTick()
+	bool TryResolveCharacterAction()
 	{
-		if (bSprinting && !bRecovering && GetVelocity().Size() > WalkSpeed)
+		if (DragComponent.IsDragging())
 		{
-			if (SprintMeter > 0.0f)
-			{
-				SprintMeter = Math::Max(SprintMeter - SprintFixedTickTime, 0.0f);
-
-				if (SprintMeter <= 0.0f)
-				{
-					bRecovering = true;
-					CharacterMovement.MaxWalkSpeed = RecoveringWalkSpeed;
-				}
-			}
+			DragComponent.StopDrag();
+			return true;
 		}
-		else
+		if (HeldItemComponent.IsHolding())
 		{
-			SprintMeter = Math::Min(SprintMeter + SprintFixedTickTime, SprintTime);
-
-			if (SprintMeter >= SprintTime)
-			{
-				bRecovering = false;
-				CharacterMovement.MaxWalkSpeed = bSprinting ? SprintSpeed : WalkSpeed;
-				OnSprintStateChanged.Broadcast(bSprinting);
-			}
+			HeldItemComponent.Drop();
+			return true;
 		}
-
-		OnSprintMeterUpdated.Broadcast(SprintMeter / SprintTime);
+		return false;
 	}
 }

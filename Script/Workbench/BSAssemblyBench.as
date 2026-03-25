@@ -10,7 +10,7 @@ class ABSAssemblyBench : AActor
 	USceneComponent SentryMountPoint;
 
 	UPROPERTY(DefaultComponent)
-	UBSInteractable Interactable;
+	UBSInteractionRegistry InteractionRegistry;
 
 	UPROPERTY(EditAnywhere, Category = "Workbench")
 	TArray<UBSChassisConfiguration> AvailableChassis;
@@ -27,6 +27,9 @@ class ABSAssemblyBench : AActor
 	UPROPERTY(EditAnywhere, Category = "Workbench")
 	UMaterialInterface SentryMaterial;
 
+	UPROPERTY(EditAnywhere, Category = "Workbench")
+	FBFInteraction WorkbenchAction;
+
 	ABSSentry Sentry;
 	APlayerController ActiveUser;
 	UBSAssemblyScreen CraftMenu;
@@ -36,11 +39,12 @@ class ABSAssemblyBench : AActor
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()
 	{
-		Interactable.OnActionExecuted.AddUFunction(this, n"OnInteracted");
+		WorkbenchAction.Delegate.BindUFunction(this, n"OnInteracted");
+		InteractionRegistry.RegisterAction(WorkbenchAction);
 	}
 
 	UFUNCTION()
-	void OnInteracted(FGameplayTag ActionTag, AActor Interactor)
+	void OnInteracted(AActor Interactor)
 	{
 		APawn InteractorPawn = Cast<APawn>(Interactor);
 		if (InteractorPawn == nullptr)

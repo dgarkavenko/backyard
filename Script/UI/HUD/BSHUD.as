@@ -17,7 +17,6 @@ class UBSHUDRoot : UFUActivatableWidget
 
 	ABSPlayerController OwningController;
 	float CurrentReticleScale = 1.0f;
-	bool bLastPromptAvailable = false;
 
 	UFUNCTION(BlueprintOverride)
 	void Construct()
@@ -35,14 +34,13 @@ class UBSHUDRoot : UFUActivatableWidget
 
 		FBSInteractionPromptInfo PromptInfo = OwningController.CurrentPromptInfo;
 
-		UpdateReticle(PromptInfo, DeltaTime);
+		UpdateReticle(OwningController.InteractionState.Target != nullptr, DeltaTime);
 		UpdatePromptWidgets(PromptInfo);
-		PrintDebugState(PromptInfo);
 	}
 
-	private void UpdateReticle(FBSInteractionPromptInfo PromptInfo, float DeltaTime)
+	private void UpdateReticle(bool bHasInteractionTarget, float DeltaTime)
 	{
-		float TargetScale = PromptInfo.bAvailable ? ReticleFocusedScale : ReticleNormalScale;
+		float TargetScale = bHasInteractionTarget ? ReticleFocusedScale : ReticleNormalScale;
 		CurrentReticleScale = Math::FInterpTo(CurrentReticleScale, TargetScale, DeltaTime, ReticleInterpSpeed);
 		Reticle.SetRenderScale(FVector2D(CurrentReticleScale, CurrentReticleScale));
 	}
@@ -64,53 +62,15 @@ class UBSHUDRoot : UFUActivatableWidget
 
 		if (Reticle != nullptr)
 		{
-			if (PromptInfo.bShowHoldProgress && OwningController.bInteractHeld)
+			if (OwningController.InteractionState.Stage == EBSInteractStage::Holding)
 			{
-				float Progress = OwningController.InteractHoldTimer / PromptInfo.HoldDuration;
-				Reticle.SetValue(Math::Clamp(Progress, 0.0f, 1.0f));
-				Reticle.SetVisibility(ESlateVisibility::HitTestInvisible);
+				Reticle.SetValue(OwningController.InteractionState.HoldProgress);
+			}
+
+			if (Reticle.Value != 0 && OwningController.InteractionState.Stage == EBSInteractStage::Pending)
+			{
+				Reticle.SetValue(0);
 			}
 		}
-	}
-
-	private void PrintDebugState(FBSInteractionPromptInfo PromptInfo)
-	{
-		if (PromptInfo.bAvailable == bLastPromptAvailable && !OwningController.bPromptDirty)
-		{
-			if (OwningController.bInteractHeld)
-			{
-				float Progress = OwningController.InteractHoldTimer / PromptInfo.HoldDuration;
-				Print(f"[Hold] {Math::RoundToInt(Progress * 100)}%", 0);
-			}
-			return;
-		}
-
-		bLastPromptAvailable = PromptInfo.bAvailable;
-
-		ABSCharacter Character = OwningController.GetBSCharacter();
-		if (Character == nullptr)
-		{
-			return;
-		}
-
-		FString FocusedName = Character.FocusedInteractable != nullptr
-			? Character.FocusedInteractable.Owner.GetName().ToString()
-			: "none";
-
-		FString PromptText = PromptInfo.bAvailable
-			? PromptInfo.DisplayName.ToString()
-			: "---";
-
-		FString HeldName = Character.HeldItemComponent.IsHolding()
-			? Character.HeldItemComponent.HeldItemData.GetName().ToString()
-			: "none";
-
-		FString HoldModeStr = Character.HeldItemComponent.IsHolding()
-			? (Character.HeldItemComponent.GetHoldMode() == EBSHoldMode::Tool ? "Tool" : "Carry")
-			: "---";
-
-		FString PlacementStr = Character.PlacementComponent.bActive ? "ACTIVE" : "off";
-
-		Print(f"[Interaction] Focus: {FocusedName} | Prompt: {PromptText} | Held: {HeldName} ({HoldModeStr}) | Placement: {PlacementStr} }", 0);
 	}
 }

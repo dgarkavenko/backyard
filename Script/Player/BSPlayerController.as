@@ -1,3 +1,18 @@
+enum EBSPlacementSource
+{
+	HeldItem,
+	DraggedItem
+}
+
+struct FSBInteractionState
+{
+	EBSInteractStage Stage = EBSInteractStage::Pending;
+	UBSInteractionRegistry Target;
+	FBSResolvedAction InstantAction;
+	FBSResolvedAction HoldAction;
+	float HoldProgress = 0.0f;
+}
+
 class ABSPlayerController : ABFPlayerController
 {
 	UPROPERTY()
@@ -6,13 +21,8 @@ class ABSPlayerController : ABFPlayerController
 	UPROPERTY()
 	TSubclassOf<UCommonActivatableWidget> HUDRoot;
 
-	// ── Input Actions ──
-
 	UPROPERTY(Category = "Input")
 	UInputAction ShowDebugAction;
-
-	UPROPERTY(Category = "Input")
-	UInputAction InteractAction;
 
 	UPROPERTY(Category = "Input")
 	UInputAction PrimaryAction;
@@ -20,31 +30,28 @@ class ABSPlayerController : ABFPlayerController
 	UPROPERTY(Category = "Input")
 	UInputAction CancelAction;
 
-	UPROPERTY(EditAnywhere, Category = "Input")
-	UInputMappingContext IMC_Movement;
+	UPROPERTY(Category = "Input")
+	UInputAction InteractAction_Down;
 
-	UPROPERTY(EditAnywhere, Category = "Input")
-	UInputMappingContext IMC_Player;
+	UPROPERTY(Category = "Input")
+	UInputAction InteractAction_Tap;
 
-	// ── Prompt State ──
+	UPROPERTY(EditAnywhere, Category = "Spawn")
+	TSubclassOf<AActor> PrimarySpawnClass;
 
 	FBSInteractionPromptInfo CurrentPromptInfo;
+	FSBInteractionState InteractionState;
 
-	// ── Hold-E State ──
+	EBSPlacementSource PlacementSource;
 
-	bool bInteractHeld = false;
-	float InteractHoldTimer = 0.0f;
-	UBSInteractable InteractHoldTarget;
-	FBSResolvedAction InteractHoldAction;
-
-	// ── Dirty Tracking ──
-
-	UBSInteractable CachedFocusedInteractable;
 	UBSItemData CachedHeldItemData;
+	bool bCachedDragging = false;
 	bool bCachedPlacementActive = false;
 	bool bPromptDirty = true;
 
-	UEnhancedInputComponent InputComp;
+	UEnhancedInputComponent EnhancedInputComponent;
+
+	UBSInteractionTraceComponent InteractorComponent;
 
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()
@@ -53,15 +60,55 @@ class ABSPlayerController : ABFPlayerController
 	}
 
 	UFUNCTION(BlueprintOverride)
+	void ReceivePossess(APawn PossessedPawn)
+	{
+		InteractorComponent = UBSInteractionTraceComponent::Get(PossessedPawn);
+		if (InteractorComponent != nullptr)
+		{
+			InteractorComponent.OnFocusedInteractableChanged.AddUFunction(this, n"OnFocusedInteractableChanged");
+		}
+	}
+
+	UFUNCTION(BlueprintOverride)
+	void ReceiveUnPossess(APawn UnpossessedPawn)
+	{
+		if (InteractorComponent != nullptr)
+		{
+			InteractorComponent.OnFocusedInteractableChanged.Clear();
+			InteractorComponent = nullptr;
+		}
+	}
+	
+	UFUNCTION()
+	void OnFocusedInteractableChanged(UBSInteractionRegistry Previous, UBSInteractionRegistry Current)
+	{
+		bPromptDirty = true;
+		
+		InteractionState = FSBInteractionState();
+
+		if (Current != nullptr)
+		{
+			InteractionState.Stage = EBSInteractStage::Pending;
+			InteractionState.Target = Current;
+			FGameplayTagContainer InteractorTags = GetBSCharacter().GetCombinedInteractorTags();
+			InteractionState.InstantAction = BSInteraction::ResolveInstantAction(Current, InteractorTags);
+			InteractionState.HoldAction = BSInteraction::ResolveHoldAction(Current, InteractorTags);
+		}
+	}
+
+	UFUNCTION(BlueprintOverride)
 	void SetupInputComponent()
 	{
-		InputComp = UEnhancedInputComponent::Get(this);
+		EnhancedInputComponent = UEnhancedInputComponent::Get(this);
 
-		InputComp.BindAction(InteractAction, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_InteractStarted"));
-		InputComp.BindAction(InteractAction, ETriggerEvent::Completed, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_InteractReleased"));
-		InputComp.BindAction(PrimaryAction, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_Primary"));
-		InputComp.BindAction(CancelAction, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_Cancel"));
-		InputComp.BindAction(ShowDebugAction, ETriggerEvent::Completed, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_ShowDebug"));
+		EnhancedInputComponent.BindAction(InteractAction_Tap, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"InteractionTap_Started"));
+		EnhancedInputComponent.BindAction(InteractAction_Tap, ETriggerEvent::Completed, FEnhancedInputActionHandlerDynamicSignature(this, n"InteractionTap"));
+		EnhancedInputComponent.BindAction(InteractAction_Down, ETriggerEvent::Triggered, FEnhancedInputActionHandlerDynamicSignature(this, n"InteractionDown"));
+		EnhancedInputComponent.BindAction(InteractAction_Down, ETriggerEvent::Completed, FEnhancedInputActionHandlerDynamicSignature(this, n"InteractionDownReleased"));
+		
+		EnhancedInputComponent.BindAction(PrimaryAction, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_Primary"));
+		EnhancedInputComponent.BindAction(CancelAction, ETriggerEvent::Started, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_Cancel"));
+		EnhancedInputComponent.BindAction(ShowDebugAction, ETriggerEvent::Completed, FEnhancedInputActionHandlerDynamicSignature(this, n"Input_ShowDebug"));
 	}
 
 	UFUNCTION(BlueprintOverride)
@@ -80,101 +127,84 @@ class ABSPlayerController : ABFPlayerController
 			RecomputePrompt(Character);
 			bPromptDirty = false;
 		}
+	}
 
-		if (bInteractHeld)
+	UFUNCTION()
+	void InteractionDownReleased(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
+	{
+		InteractionState.Stage = EBSInteractStage::Pending;
+	}
+
+	/** ElapsedTime = with .2s tap time; TriggeredTime = clean time */  
+	UFUNCTION()
+	void InteractionDown(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
+	{
+		if (InteractionState.Stage == EBSInteractStage::Completed)
 		{
-			UpdateHoldTimer(Character, DeltaSeconds);
+			return;
 		}
 
-		if (Character.PlacementComponent.bActive && Character.bCameraTraceHit)
+		if (InteractionState.HoldAction.bValid)
 		{
-			Character.PlacementComponent.UpdatePreview(Character.CameraTraceResult);
+			InteractionState.Stage = EBSInteractStage::Holding;
+			InteractionState.HoldProgress = TriggeredTime / InteractionState.HoldAction.Action.HoldDuration;
+
+			if (TriggeredTime > InteractionState.HoldAction.Action.HoldDuration)
+			{				
+				ExecuteResolvedAction(InteractionState.HoldAction, GetBSCharacter());
+				InteractionState.Stage = EBSInteractStage::Completed;
+			}
 		}
 	}
 
-	// ── Input Handlers ──
+	bool bConsumeNextTap = false;
 
+	/** InteractionTap fires on release. In some cases we can use press event, but we have to consume it to not trigger twice*/
 	UFUNCTION()
-	void Input_InteractStarted(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
+	void InteractionTap_Started(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
 	{
+		bConsumeNextTap = false;
+
 		ABSCharacter Character = GetBSCharacter();
-		if (Character == nullptr)
+		if (Character != nullptr && Character.TryResolveCharacterAction())
 		{
+			bPromptDirty = true;
+			bConsumeNextTap = true;
 			return;
 		}
 
-		if (Character.PlacementComponent.bActive)
+		if (!InteractionState.HoldAction.bValid && InteractionState.InstantAction.bValid)
 		{
-			Character.PlacementComponent.CancelPlacement(Character.HeldItemComponent);
-			bPromptDirty = true;
-			return;
-		}
 
-		UBSInteractable Focused = Character.FocusedInteractable;
+			ExecuteResolvedAction(InteractionState.InstantAction, GetBSCharacter());
+			InteractionState.Stage = EBSInteractStage::Completed;
+			bConsumeNextTap = true;
 
-		if (Focused != nullptr)
-		{
-			FGameplayTagContainer InteractorTags = Character.HeldItemComponent.GetGrantedTags();
-			FBSResolvedAction HoldAction = BSInteraction::ResolveHoldAction(Focused, InteractorTags);
-
-			if (HoldAction.bValid)
-			{
-				Print(f"[Hold] Started: {HoldAction.Action.DisplayName} ({HoldAction.Action.HoldDuration:.1f}s)");
-				bInteractHeld = true;
-				InteractHoldTimer = 0.0f;
-				InteractHoldTarget = Focused;
-				InteractHoldAction = HoldAction;
-				return;
-			}
-
-			FBSResolvedAction InstantAction = BSInteraction::ResolveInstantAction(Focused, InteractorTags);
-			if (InstantAction.bValid)
-			{
-				Print(f"[Interact] {InstantAction.Action.DisplayName}");
-				ExecuteResolvedAction(Character, InstantAction, Focused);
-				return;
-			}
-		}
-
-		if (Character.HeldItemComponent.IsHolding())
-		{
-			Print("[Interact] Drop");
-			Character.HeldItemComponent.Drop();
-			bPromptDirty = true;
 		}
 	}
 
 	UFUNCTION()
-	void Input_InteractReleased(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
+	void InteractionTap(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
 	{
-		ABSCharacter Character = GetBSCharacter();
-		if (Character == nullptr)
+		if (bConsumeNextTap)
 		{
 			return;
 		}
 
-		bool bWasHolding = bInteractHeld;
-		ResetHoldState();
-
-		UBSInteractable Focused = Character.FocusedInteractable;
-
-		if (Focused != nullptr)
+		if (InteractionState.InstantAction.bValid && InteractionState.Stage != EBSInteractStage::Completed)
 		{
-			FGameplayTagContainer InteractorTags = Character.HeldItemComponent.GetGrantedTags();
-			FBSResolvedAction InstantAction = BSInteraction::ResolveInstantAction(Focused, InteractorTags);
-
-			if (InstantAction.bValid)
+			ExecuteResolvedAction(InteractionState.InstantAction, GetBSCharacter());
+		}
+		else
+		{
+			ABSCharacter Character = GetBSCharacter();
+			if (Character != nullptr && Character.TryResolveCharacterAction())
 			{
-				ExecuteResolvedAction(Character, InstantAction, Focused);
-				return;
+				bPromptDirty = true;
 			}
 		}
 
-		if (Focused == nullptr && Character.HeldItemComponent.IsHolding())
-		{
-			Character.HeldItemComponent.Drop();
-			bPromptDirty = true;
-		}
+		InteractionState.Stage = EBSInteractStage::Pending;
 	}
 
 	UFUNCTION()
@@ -188,36 +218,43 @@ class ABSPlayerController : ABFPlayerController
 
 		if (Character.PlacementComponent.bActive)
 		{
-			Character.PlacementComponent.ConfirmPlacement(Character.HeldItemComponent);
+			FVector Location;
+			FRotator Rotation;
+			if (Character.PlacementComponent.ConfirmPlacement(Location, Rotation))
+			{
+				Character.HeldItemComponent.PlaceAt(Location, Rotation);
+			}
 			bPromptDirty = true;
 			return;
 		}
 
-		if (!Character.HeldItemComponent.IsHolding())
+		if (Character.HeldItemComponent.IsHolding())
 		{
-			return;
+			UBSItemData HeldData = Character.HeldItemComponent.HeldItemData;
+			if (HeldData != nullptr && HeldData.bPlaceable)
+			{
+				Character.HeldItemComponent.HideForPlacement();
+				Character.PlacementComponent.ActivatePlacement(HeldData);
+				PlacementSource = EBSPlacementSource::HeldItem;
+				bPromptDirty = true;
+				return;
+			}
 		}
 
-		UBSItemData HeldData = Character.HeldItemComponent.HeldItemData;
-
-		if (HeldData != nullptr && HeldData.bPlaceable)
-		{
-			Character.PlacementComponent.ActivatePlacement(Character.HeldItemComponent);
-			bPromptDirty = true;
-			return;
-		}
-
-		UBSInteractable Focused = Character.FocusedInteractable;
+		UBSInteractionRegistry Focused = InteractorComponent.FocusedInteractable;
 		if (Focused != nullptr)
 		{
-			FGameplayTagContainer InteractorTags = Character.HeldItemComponent.GetGrantedTags();
+			FGameplayTagContainer InteractorTags = Character.GetCombinedInteractorTags();
 			FBSResolvedAction ToolAction = BSInteraction::ResolveToolAction(Focused, InteractorTags);
 
 			if (ToolAction.bValid)
 			{
-				ExecuteResolvedAction(Character, ToolAction, Focused);
+				ExecuteResolvedAction(ToolAction, Character);
+				return;
 			}
 		}
+
+		SpawnPrimaryActor(Character);
 	}
 
 	UFUNCTION()
@@ -231,7 +268,8 @@ class ABSPlayerController : ABFPlayerController
 
 		if (Character.PlacementComponent.bActive)
 		{
-			Character.PlacementComponent.CancelPlacement(Character.HeldItemComponent);
+			Character.PlacementComponent.CancelPlacement();
+			RestorePlacementSource(Character);
 			bPromptDirty = true;
 		}
 	}
@@ -242,86 +280,52 @@ class ABSPlayerController : ABFPlayerController
 		PushWidgetToPrimaryLayout(GameplayTags::ForgeryUI_Layer_GameMenu, DebugScreen);
 	}
 
-	// ── Action Execution Pipeline ──
-
-	void ExecuteResolvedAction(ABSCharacter Character, FBSResolvedAction Resolved, UBSInteractable Target)
+	void ExecuteResolvedAction(FBSResolvedAction Resolved, AActor Interactor)
 	{
-		if (!Resolved.bValid)
+		Print(f"ExecuteResolvedAction {Resolved.Action.DisplayName}");
+		if (Resolved.bValid)
+		{
+			Resolved.Action.Delegate.ExecuteIfBound(Interactor);
+			bPromptDirty = true;
+		}
+	}
+
+	void RestorePlacementSource(ABSCharacter Character)
+	{
+		Character.HeldItemComponent.RestoreFromPlacement();
+	}
+
+	void SpawnPrimaryActor(ABSCharacter Character)
+	{
+		if (!PrimarySpawnClass.IsValid())
 		{
 			return;
 		}
 
-		FGameplayTagContainer InteractorTags = Character.HeldItemComponent.GetGrantedTags();
-		BSInteraction::ExecuteAction(Target, Resolved.Action.ActionTag, Character, InteractorTags);
-
-		switch (Resolved.Action.Outcome)
+		FHitResult TraceResult = InteractorComponent.CameraTraceResult;
+		if (!InteractorComponent.bCameraTraceHit)
 		{
-			case EBSActionOutcome::PickupTarget:
-			{
-				if (Target.ItemData != nullptr)
-				{
-					Character.HeldItemComponent.Pickup(Target.Owner, Target.ItemData);
-				}
-				break;
-			}
-			case EBSActionOutcome::None:
-			default:
-			{
-				break;
-			}
-		}
-
-		bPromptDirty = true;
-	}
-
-	// ── Hold Timer ──
-
-	void UpdateHoldTimer(ABSCharacter Character, float DeltaSeconds)
-	{
-		if (InteractHoldTarget != Character.FocusedInteractable)
-		{
-			FString OldName = InteractHoldTarget != nullptr ? InteractHoldTarget.Owner.GetName().ToString() : "null";
-			FString NewName = Character.FocusedInteractable != nullptr ? Character.FocusedInteractable.Owner.GetName().ToString() : "null";
-			Print(f"[Hold] Target changed: {OldName} -> {NewName}, cancelling");
-			ResetHoldState();
 			return;
 		}
 
-		InteractHoldTimer += DeltaSeconds;
-		Print(f"[Hold] {InteractHoldTimer:.2f} / {InteractHoldAction.Action.HoldDuration:.2f}", Duration = 0.0f);
+		FVector SpawnLocation = TraceResult.ImpactPoint;
+		FRotator SpawnRotation = FRotator(0.0f, Character.GetControlRotation().Yaw, 0.0f);
 
-		if (InteractHoldTimer >= InteractHoldAction.Action.HoldDuration)
-		{
-			FBSResolvedAction CompletedAction = InteractHoldAction;
-			UBSInteractable CompletedTarget = InteractHoldTarget;
-			ResetHoldState();
-
-			ExecuteResolvedAction(Character, CompletedAction, CompletedTarget);
-		}
+		SpawnActor(PrimarySpawnClass, SpawnLocation, SpawnRotation);
 	}
-
-	void ResetHoldState()
-	{
-		bInteractHeld = false;
-		InteractHoldTimer = 0.0f;
-		InteractHoldTarget = nullptr;
-		InteractHoldAction = FBSResolvedAction();
-	}
-
-	// ── Dirty Tracking / Prompt Cache ──
 
 	void UpdateDirtyState(ABSCharacter Character)
 	{
-		UBSInteractable CurrentFocused = Character.FocusedInteractable;
 		UBSItemData CurrentHeldData = Character.HeldItemComponent.HeldItemData;
+		bool bCurrentDragging = Character.DragComponent.IsDragging();
 		bool bCurrentPlacement = Character.PlacementComponent.bActive;
 
-		if (CurrentFocused != CachedFocusedInteractable
-			|| CurrentHeldData != CachedHeldItemData
+		if (CurrentHeldData != CachedHeldItemData
+			|| bCurrentDragging != bCachedDragging
 			|| bCurrentPlacement != bCachedPlacementActive)
 		{
-			CachedFocusedInteractable = CurrentFocused;
 			CachedHeldItemData = CurrentHeldData;
+			bCachedDragging = bCurrentDragging;
 			bCachedPlacementActive = bCurrentPlacement;
 			bPromptDirty = true;
 		}
@@ -338,14 +342,15 @@ class ABSPlayerController : ABFPlayerController
 			return;
 		}
 
-		UBSInteractable Focused = Character.FocusedInteractable;
+		UBSInteractionRegistry Focused = InteractorComponent.FocusedInteractable;
 		if (Focused != nullptr)
 		{
-			FGameplayTagContainer InteractorTags = Character.HeldItemComponent.GetGrantedTags();
-			bool bIsHolding = Character.HeldItemComponent.IsHolding();
-			CurrentPromptInfo = BSInteraction::BuildPromptInfo(Focused, InteractorTags, bIsHolding);
+			FGameplayTagContainer InteractorTags = Character.GetCombinedInteractorTags();
+			bool bIsHoldingTool = Character.HeldItemComponent.IsHolding();
+			bool bIsDragging = Character.DragComponent.IsDragging();
+			CurrentPromptInfo = BSInteraction::BuildPromptInfo(Focused, InteractorTags, bIsHoldingTool, bIsDragging);
 		}
-		else if (Character.HeldItemComponent.IsHolding())
+		else if (Character.DragComponent.IsDragging() || Character.HeldItemComponent.IsHolding())
 		{
 			CurrentPromptInfo = FBSInteractionPromptInfo();
 			CurrentPromptInfo.bAvailable = true;

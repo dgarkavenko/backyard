@@ -6,23 +6,14 @@ class UBSPlacementComponent : UActorComponent
 	bool bActive = false;
 	AActor PreviewActor;
 
-	void ActivatePlacement(UBSHeldItemComponent HeldItem)
+	void ActivatePlacement(UBSItemData ItemData)
 	{
-		if (HeldItem == nullptr || !HeldItem.IsHolding())
+		if (ItemData == nullptr || ItemData.PlacementPreviewClass == nullptr)
 		{
 			return;
 		}
 
-		UBSItemData ItemData = HeldItem.HeldItemData;
-		if (ItemData == nullptr)
-		{
-			return;
-		}
-
-		if (ItemData.PlacementPreviewClass != nullptr)
-		{
-			PreviewActor = SpawnActor(ItemData.PlacementPreviewClass, Owner.ActorLocation, FRotator());
-		}
+		PreviewActor = SpawnActor(ItemData.PlacementPreviewClass, Owner.ActorLocation, FRotator());
 
 		if (PreviewActor == nullptr)
 		{
@@ -32,16 +23,6 @@ class UBSPlacementComponent : UActorComponent
 		PreviewActor.SetActorEnableCollision(false);
 		PreviewActor.SetActorTickEnabled(false);
 		ApplyGhostMaterial(PreviewActor);
-
-		if (HeldItem.GetHoldMode() == EBSHoldMode::Carry)
-		{
-			HeldItem.PhysicsCarry.Release();
-			HeldItem.HeldActor.SetActorHiddenInGame(true);
-		}
-		else
-		{
-			HeldItem.DestroyDisplayMesh();
-		}
 
 		bActive = true;
 	}
@@ -56,44 +37,24 @@ class UBSPlacementComponent : UActorComponent
 		PreviewActor.SetActorLocation(HitResult.ImpactPoint);
 	}
 
-	bool ConfirmPlacement(UBSHeldItemComponent HeldItem)
+	bool ConfirmPlacement(FVector& OutLocation, FRotator& OutRotation)
 	{
-		if (PreviewActor == nullptr || HeldItem == nullptr || !HeldItem.IsHolding())
+		if (PreviewActor == nullptr)
 		{
 			return false;
 		}
 
-		FVector Location = PreviewActor.GetActorLocation();
-		FRotator Rotation = PreviewActor.GetActorRotation();
-
-		HeldItem.PlaceAt(Location, Rotation);
+		OutLocation = PreviewActor.GetActorLocation();
+		OutRotation = PreviewActor.GetActorRotation();
 
 		DestroyPreview();
 		bActive = false;
 		return true;
 	}
 
-	void CancelPlacement(UBSHeldItemComponent HeldItem)
+	void CancelPlacement()
 	{
 		DestroyPreview();
-
-		if (HeldItem != nullptr && HeldItem.IsHolding())
-		{
-			if (HeldItem.GetHoldMode() == EBSHoldMode::Carry)
-			{
-				HeldItem.HeldActor.SetActorHiddenInGame(false);
-				UPrimitiveComponent RootPrimitive = Cast<UPrimitiveComponent>(HeldItem.HeldActor.RootComponent);
-				if (RootPrimitive != nullptr)
-				{
-					HeldItem.PhysicsCarry.Grab(RootPrimitive);
-				}
-			}
-			else
-			{
-				HeldItem.CreateDisplayMesh();
-			}
-		}
-
 		bActive = false;
 	}
 
@@ -113,8 +74,7 @@ class UBSPlacementComponent : UActorComponent
 			return;
 		}
 
-		TArray<UStaticMeshComponent> MeshComponents;
-		Actor.GetComponentsByClass(MeshComponents);
+		TArray<UStaticMeshComponent> MeshComponents = Actor.GetComponentsByClass(UStaticMeshComponent);
 
 		for (UStaticMeshComponent MeshComponent : MeshComponents)
 		{

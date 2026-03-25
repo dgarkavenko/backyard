@@ -1,9 +1,3 @@
-enum EBSHoldMode
-{
-	Tool,
-	Carry
-}
-
 class UBSItemData : UDataAsset
 {
 	UPROPERTY(EditAnywhere, Category = "Display")
@@ -14,9 +8,6 @@ class UBSItemData : UDataAsset
 
 	UPROPERTY(EditAnywhere, Category = "Tags")
 	FGameplayTagContainer GrantedTags;
-
-	UPROPERTY(EditAnywhere, Category = "Hold")
-	EBSHoldMode HoldMode = EBSHoldMode::Tool;
 
 	UPROPERTY(EditAnywhere, Category = "Placement")
 	bool bPlaceable = false;

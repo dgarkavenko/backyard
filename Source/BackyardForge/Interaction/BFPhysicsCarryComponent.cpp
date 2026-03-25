@@ -21,10 +21,19 @@ void UBFPhysicsCarryComponent::Grab(UPrimitiveComponent* Component)
 	PhysicsHandle->AngularStiffness = AngularStiffness;
 	PhysicsHandle->AngularDamping = AngularDamping;
 
+	FVector GrabLocation = Component->Bounds.Origin;
+	if (AActor* OwningActor = Component->GetOwner())
+	{
+		FVector ActorOrigin;
+		FVector ActorExtent;
+		OwningActor->GetActorBounds(false, ActorOrigin, ActorExtent);
+		GrabLocation = ActorOrigin;
+	}
+
 	PhysicsHandle->GrabComponentAtLocationWithRotation(
 		Component,
 		NAME_None,
-		Component->GetComponentLocation(),
+		GrabLocation,
 		Component->GetComponentRotation()
 	);
 }

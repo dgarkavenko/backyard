@@ -8,12 +8,8 @@ class UBSHeldItemComponent : UActorComponent
 	UPROPERTY(Category = "Delegates")
 	FBSHeldItemChangedDelegate OnHeldItemChanged;
 
-	UPROPERTY(DefaultComponent)
-	UBFPhysicsCarryComponent PhysicsCarry;
-
 	AActor HeldActor;
 	UBSItemData HeldItemData;
-	EBSHoldMode ActiveHoldMode;
 	UStaticMeshComponent DisplayMesh;
 	FGameplayTagContainer GrantedTags;
 
@@ -25,11 +21,6 @@ class UBSHeldItemComponent : UActorComponent
 	FGameplayTagContainer GetGrantedTags() const
 	{
 		return GrantedTags;
-	}
-
-	EBSHoldMode GetHoldMode() const
-	{
-		return ActiveHoldMode;
 	}
 
 	void Pickup(AActor TargetActor, UBSItemData ItemData)
@@ -46,17 +37,13 @@ class UBSHeldItemComponent : UActorComponent
 
 		HeldActor = TargetActor;
 		HeldItemData = ItemData;
-		ActiveHoldMode = ItemData.HoldMode;
 		GrantedTags = ItemData.GrantedTags;
 
-		if (ActiveHoldMode == EBSHoldMode::Tool)
-		{
-			PickupTool();
-		}
-		else
-		{
-			PickupCarry();
-		}
+		HeldActor.SetActorHiddenInGame(true);
+		HeldActor.SetActorEnableCollision(false);
+		HeldActor.SetActorTickEnabled(false);
+
+		CreateDisplayMesh();
 
 		OnHeldItemChanged.Broadcast(HeldItemData, true);
 	}
@@ -68,14 +55,13 @@ class UBSHeldItemComponent : UActorComponent
 			return;
 		}
 
-		if (ActiveHoldMode == EBSHoldMode::Tool)
-		{
-			DropTool();
-		}
-		else
-		{
-			DropCarry();
-		}
+		FVector DropLocation = CalculateDropLocation();
+		HeldActor.SetActorLocation(DropLocation);
+		HeldActor.SetActorHiddenInGame(false);
+		HeldActor.SetActorEnableCollision(true);
+		HeldActor.SetActorTickEnabled(true);
+
+		DestroyDisplayMesh();
 
 		UBSItemData PreviousItemData = HeldItemData;
 		HeldActor = nullptr;
@@ -90,16 +76,6 @@ class UBSHeldItemComponent : UActorComponent
 		if (!IsHolding())
 		{
 			return;
-		}
-
-		if (ActiveHoldMode == EBSHoldMode::Carry)
-		{
-			PhysicsCarry.Release();
-			UPrimitiveComponent RootPrimitive = Cast<UPrimitiveComponent>(HeldActor.RootComponent);
-			if (RootPrimitive != nullptr)
-			{
-				RootPrimitive.SetSimulatePhysics(false);
-			}
 		}
 
 		HeldActor.SetActorLocationAndRotation(Location, Rotation);
@@ -117,83 +93,15 @@ class UBSHeldItemComponent : UActorComponent
 		OnHeldItemChanged.Broadcast(PreviousItemData, false);
 	}
 
-	
-
-	UFUNCTION(BlueprintOverride)
-	void Tick(float DeltaSeconds)
+	void HideForPlacement()
 	{
-		if (!IsHolding() || ActiveHoldMode != EBSHoldMode::Carry)
-		{
-			return;
-		}
-
-		APawn OwnerPawn = Cast<APawn>(Owner);
-		if (OwnerPawn == nullptr)
-		{
-			return;
-		}
-
-		UCameraComponent Camera = UCameraComponent::Get(OwnerPawn);
-		if (Camera == nullptr)
-		{
-			return;
-		}
-
-		FVector TargetLocation = Camera.WorldLocation + Camera.ForwardVector * PhysicsCarry.CarryDistance;
-		PhysicsCarry.UpdateTarget(TargetLocation);
-	}
-
-	// ── Tool Mode ──
-
-	private void PickupTool()
-	{
-		HeldActor.SetActorHiddenInGame(true);
-		HeldActor.SetActorEnableCollision(false);
-		HeldActor.SetActorTickEnabled(false);
-
-		CreateDisplayMesh();
-	}
-
-	private void DropTool()
-	{
-		FVector DropLocation = CalculateDropLocation();
-		HeldActor.SetActorLocation(DropLocation);
-		HeldActor.SetActorHiddenInGame(false);
-		HeldActor.SetActorEnableCollision(true);
-		HeldActor.SetActorTickEnabled(true);
-
 		DestroyDisplayMesh();
 	}
 
-	// ── Carry Mode ──
-
-	private void PickupCarry()
+	void RestoreFromPlacement()
 	{
-		UPrimitiveComponent RootPrimitive = Cast<UPrimitiveComponent>(HeldActor.RootComponent);
-		if (RootPrimitive == nullptr)
-		{
-			return;
-		}
-
-		HeldActor.SetActorTickEnabled(false);
-		RootPrimitive.SetSimulatePhysics(true);
-		RootPrimitive.SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Ignore);
-
-		PhysicsCarry.Grab(RootPrimitive);
+		CreateDisplayMesh();
 	}
-
-	private void DropCarry()
-	{
-		PhysicsCarry.Release();
-
-		UPrimitiveComponent RootPrimitive = Cast<UPrimitiveComponent>(HeldActor.RootComponent);
-		if (RootPrimitive != nullptr)
-		{
-			RootPrimitive.SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Block);
-		}
-	}
-
-	// ── Display Mesh (Tool mode) ──
 
 	void CreateDisplayMesh()
 	{
