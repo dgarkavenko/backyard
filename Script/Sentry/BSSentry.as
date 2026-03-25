@@ -209,14 +209,14 @@ class ABSSentry : AActor
 		}
 	}
 
-	void DisableWorldInteractions()
+	void DisableTerminalInteraction()
 	{
-		Base.SetCollisionResponseToChannel(ECollisionChannel::ECC_GameTraceChannel2, ECollisionResponse::ECR_Ignore);
+		InteractionRegistry.UnregisterActionByTag(GameplayTags::Backyard_Interaction_Terminal);
 	}
 
-	void EnableWorldInteractions()
+	void EnableTerminalInteraction()
 	{
-		Base.SetCollisionResponseToChannel(ECollisionChannel::ECC_GameTraceChannel2, ECollisionResponse::ECR_Block);
+		InteractionRegistry.RegisterAction(TerminalInteraction.TerminalInteraction);
 	}
 
 	UFUNCTION(BlueprintCallable, Category = "Sentry")

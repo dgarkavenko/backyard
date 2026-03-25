@@ -13,6 +13,17 @@ class UBSInteractionRegistry : UActorComponent
 		Actions.Add(Action);
 	}
 
+	void UnregisterActionByTag(FGameplayTag ActionTag)
+	{
+		for (int Index = Actions.Num() - 1; Index >= 0; Index--)
+		{
+			if (Actions[Index].ActionTag == ActionTag)
+			{
+				Actions.RemoveAt(Index);
+			}
+		}
+	}
+
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()
 	{
