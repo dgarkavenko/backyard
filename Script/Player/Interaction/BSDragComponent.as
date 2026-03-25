@@ -65,6 +65,7 @@ class UBSDragComponent : UActorComponent
 	EBSDragStabilize StabilizeMode;
 	FVector CameraRotationInfluence;
 	FQuat CameraRotationOnGrab;
+	FQuat LastTargetRotation;
 	
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()
@@ -159,6 +160,7 @@ class UBSDragComponent : UActorComponent
 		{
 			RotationOnStart = RootPrimitive.ComponentQuat;
 			FreeRotation = RotationOnStart;
+			LastTargetRotation = RotationOnStart;
 		}
 
 		ABSCharacter Character = Cast<ABSCharacter>(Owner);
@@ -291,8 +293,12 @@ class UBSDragComponent : UActorComponent
 
 		if (StabilizeMode == EBSDragStabilize::Free)
 		{
-			FreeRotation = FQuat::FastLerp(FreeRotation, DraggedActor.ActorQuat, DeltaSeconds * 2);
+			float AngularDiff = LastTargetRotation.AngularDistance(DraggedActor.ActorQuat);
+			float CollisionAlpha = Math::Clamp(AngularDiff / Math::DegreesToRadians(5.0f), 0.0f, 1.0f);
+			FreeRotation = FQuat::FastLerp(FreeRotation, DraggedActor.ActorQuat, CollisionAlpha * DeltaSeconds * 2);
+
 			FQuat TargetRotation = CameraInfluenceQuat * FreeRotation;
+			LastTargetRotation = TargetRotation;
 			PhysicsCarry.UpdateTargetRotation(TargetRotation.Rotator());
 		}
 		else
