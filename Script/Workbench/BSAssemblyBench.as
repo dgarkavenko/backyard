@@ -30,9 +30,18 @@ class ABSAssemblyBench : AActor
 	UPROPERTY(EditAnywhere, Category = "Workbench")
 	FBFInteraction WorkbenchAction;
 
+	UPROPERTY(EditAnywhere, Category = "Workbench|Snap", meta = (ClampMin = "10", ClampMax = "300", Units = "cm"))
+	float SnapZoneRadius = 75.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Workbench|Snap")
+	FVector SentryDismountOffset = FVector(150.0f, 0.0f, 0.0f);
+
 	ABSSentry Sentry;
+	ABSSentry PendingSentry;
 	APlayerController ActiveUser;
 	UBSAssemblyScreen CraftMenu;
+	USphereComponent SnapZone;
+	FTimerHandle PendingSentryTimerHandle;
 
 	default CameraViewpoint.bAutoActivate = false;
 
@@ -41,6 +50,16 @@ class ABSAssemblyBench : AActor
 	{
 		WorkbenchAction.Delegate.BindUFunction(this, n"OnInteracted");
 		InteractionRegistry.RegisterAction(WorkbenchAction);
+
+		SnapZone = USphereComponent::Create(this, n"SnapZone");
+		SnapZone.AttachTo(SentryMountPoint);
+		SnapZone.SetSphereRadius(SnapZoneRadius);
+		SnapZone.SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		SnapZone.SetGenerateOverlapEvents(true);
+		SnapZone.SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
+		SnapZone.SetCollisionResponseToChannel(ECollisionChannel::ECC_WorldDynamic, ECollisionResponse::ECR_Overlap);
+		SnapZone.OnComponentBeginOverlap.AddUFunction(this, n"OnSnapZoneBeginOverlap");
+		SnapZone.OnComponentEndOverlap.AddUFunction(this, n"OnSnapZoneEndOverlap");
 	}
 
 	UFUNCTION()
@@ -69,11 +88,6 @@ class ABSAssemblyBench : AActor
 	void ActivateWorkbench(APlayerController Controller)
 	{
 		ActiveUser = Controller;
-
-		if (Sentry == nullptr)
-		{
-			SpawnSentry();
-		}
 
 		CameraViewpoint.Activate();
 		Controller.SetViewTargetWithBlend(this, 0.5f);
@@ -124,35 +138,35 @@ class ABSAssemblyBench : AActor
 		CameraViewpoint.Deactivate();
 	}
 
-	void UpdateSentryConfiguration(UBSChassisConfiguration Chassis, UBSSentryLoadout Loadout)
-	{
-		if (Sentry == nullptr || Sentry.Configuration == nullptr)
-		{
-			return;
-		}
+	// ── Sentry State ──
 
-		Sentry.Configuration.Chassis = Chassis;
-		Sentry.Configuration.Loadout = Loadout;
-		Sentry.ApplyConfiguration();
+	bool HasSentry() const
+	{
+		return Sentry != nullptr;
 	}
 
-	private void SpawnSentry()
+	void MountSentry(ABSSentry SentryToMount)
 	{
-		if (SentryClass.Get() == nullptr)
+		if (SentryToMount == nullptr)
 		{
 			return;
 		}
 
-		FVector SpawnLocation = SentryMountPoint.GetWorldLocation();
-		FRotator SpawnRotation = SentryMountPoint.GetWorldRotation();
+		Sentry = SentryToMount;
 
-		Sentry = Cast<ABSSentry>(SpawnActor(SentryClass, SpawnLocation, SpawnRotation));
-		if (Sentry == nullptr)
+		Sentry.SetActorLocationAndRotation(
+			SentryMountPoint.GetWorldLocation(),
+			SentryMountPoint.GetWorldRotation()
+		);
+
+		UPrimitiveComponent RootPrimitive = Cast<UPrimitiveComponent>(Sentry.RootComponent);
+		if (RootPrimitive != nullptr)
 		{
-			return;
+			RootPrimitive.SetSimulatePhysics(false);
 		}
 
 		Sentry.SetActorTickEnabled(false);
+		Sentry.DisableWorldInteractions();
 
 		if (SentryMaterial != nullptr)
 		{
@@ -165,5 +179,133 @@ class ABSAssemblyBench : AActor
 		}
 
 		Sentry.ApplyConfiguration();
+	}
+
+	ABSSentry UnmountSentry()
+	{
+		if (Sentry == nullptr)
+		{
+			return nullptr;
+		}
+
+		ABSSentry Dismounted = Sentry;
+		Sentry = nullptr;
+
+		Dismounted.EnableWorldInteractions();
+		Dismounted.SetActorTickEnabled(true);
+
+		return Dismounted;
+	}
+
+	void CraftNewSentry()
+	{
+		if (SentryClass.Get() == nullptr || Sentry != nullptr)
+		{
+			return;
+		}
+
+		FVector SpawnLocation = SentryMountPoint.GetWorldLocation();
+		FRotator SpawnRotation = SentryMountPoint.GetWorldRotation();
+
+		ABSSentry NewSentry = Cast<ABSSentry>(SpawnActor(SentryClass, SpawnLocation, SpawnRotation));
+		if (NewSentry == nullptr)
+		{
+			return;
+		}
+
+		MountSentry(NewSentry);
+	}
+
+	void TakeSentry()
+	{
+		ABSSentry Taken = UnmountSentry();
+		if (Taken == nullptr)
+		{
+			return;
+		}
+
+		FVector DismountWorld = ActorTransform.TransformPosition(SentryDismountOffset);
+		Taken.SetActorLocation(DismountWorld);
+
+		DeactivateWorkbench();
+	}
+
+	void UpdateSentryConfiguration(UBSChassisConfiguration Chassis, UBSSentryLoadout Loadout)
+	{
+		if (Sentry == nullptr || Sentry.Configuration == nullptr)
+		{
+			return;
+		}
+
+		Sentry.Configuration.Chassis = Chassis;
+		Sentry.Configuration.Loadout = Loadout;
+		Sentry.ApplyConfiguration();
+	}
+
+	// ── Snap Zone ──
+
+	UFUNCTION()
+	void OnSnapZoneBeginOverlap(
+		UPrimitiveComponent OverlappedComponent, AActor OtherActor,
+		UPrimitiveComponent OtherComponent, int OtherBodyIndex,
+		bool bFromSweep, const FHitResult&in Hit)
+	{
+		ABSSentry IncomingSentry = Cast<ABSSentry>(OtherActor);
+		if (IncomingSentry == nullptr || IncomingSentry == Sentry)
+		{
+			return;
+		}
+
+		if (Sentry != nullptr)
+		{
+			return;
+		}
+
+		ABSCharacter Player = Cast<ABSCharacter>(Gameplay::GetPlayerCharacter(0));
+		if (Player != nullptr && Player.DragComponent.IsDragging())
+		{
+			PendingSentry = IncomingSentry;
+			PendingSentryTimerHandle = System::SetTimer(this, n"OnCheckPendingSentry", 0.2f, true);
+			return;
+		}
+
+		MountSentry(IncomingSentry);
+	}
+
+	UFUNCTION()
+	void OnSnapZoneEndOverlap(
+		UPrimitiveComponent OverlappedComponent, AActor OtherActor,
+		UPrimitiveComponent OtherComponent, int OtherBodyIndex)
+	{
+		if (OtherActor == PendingSentry)
+		{
+			PendingSentry = nullptr;
+			System::ClearAndInvalidateTimerHandle(PendingSentryTimerHandle);
+		}
+	}
+
+	UFUNCTION()
+	void OnCheckPendingSentry()
+	{
+		if (PendingSentry == nullptr || Sentry != nullptr)
+		{
+			PendingSentry = nullptr;
+			System::ClearAndInvalidateTimerHandle(PendingSentryTimerHandle);
+			return;
+		}
+
+		ABSCharacter Player = Cast<ABSCharacter>(Gameplay::GetPlayerCharacter(0));
+		if (Player != nullptr && Player.DragComponent.IsDragging())
+		{
+			return;
+		}
+
+		if (SnapZone.IsOverlappingActor(PendingSentry))
+		{
+			MountSentry(PendingSentry);
+		}
+
+		PendingSentry = nullptr;
+		System::ClearAndInvalidateTimerHandle(PendingSentryTimerHandle);
 	}
 }
