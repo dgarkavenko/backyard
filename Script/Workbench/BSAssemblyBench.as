@@ -267,7 +267,11 @@ class ABSAssemblyBench : AActor
 
 		if (OtherActor == Sentry)
 		{
-			UnmountSentry();
+			ABSCharacter Player = Cast<ABSCharacter>(Gameplay::GetPlayerCharacter(0));
+			if (Player != nullptr && Player.DragComponent.DraggedActor == Sentry)
+			{
+				UnmountSentry();
+			}
 		}
 	}
 
