@@ -7,24 +7,30 @@ enum EBSDragDistance
 	KeepSetDistance,
 }
 
-enum EBSDragStabilize
+enum EBSDragStabilize 
 {
-	Free,
-	FreeWithCameraRelatedYaw,
-	KeepGlobalUpVector,
-	KeepGlobalUpVectorWithCameraRelatedYaw,
-	KeepRotationRelatedToCamera,
-	KeepGlobalRotationWithCameraRelatedYaw,
-	KeepGlobalRotation,
+	None,
+	KeepStraight,
+	KeepOriginal
+}
+
+enum EBSDragParent
+{
+	None,
+	Yaw,
+	Full
 }
 
 struct FBSDragParams
 {
 	UPROPERTY()
-	EBSDragDistance DragDistanceMode = EBSDragDistance::KeepSetDistance;
+	EBSDragDistance DistanceMode = EBSDragDistance::KeepSetDistance;
 
 	UPROPERTY()
-	EBSDragStabilize DragStabilizeMode = EBSDragStabilize::KeepGlobalRotation;
+	EBSDragStabilize StabilizationMode = EBSDragStabilize::KeepStraight;
+	
+	UPROPERTY()
+	EBSDragParent ParentMode = EBSDragParent::Yaw;
 
 	UPROPERTY()
 	float DragDistance = 200.0f;
@@ -58,12 +64,15 @@ class UBSDragComponent : UActorComponent
 	UBFPhysicsCarryComponent PhysicsCarry;
 	AActor DraggedActor;
 
-	FQuat RotationOnStart;
+	FQuat TargetItemQuat;
 	float DragYawOffset = 0.0f;
 	float DragDistance = 200;
 	EBSDragStabilize StabilizeMode;
+	EBSDragParent ParentMode;
 	FQuat CameraRotationOnGrab;
-	float LastCameraYaw;
+	FQuat LastCameraQuat;
+
+	UCameraComponent Camera;
 
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()
@@ -78,166 +87,7 @@ class UBSDragComponent : UActorComponent
 		}
 	}
 
-	bool IsDragging() const
-	{
-		return DraggedActor != nullptr;
-	}
-
-	private bool IsFreeMode() const
-	{
-		return StabilizeMode == EBSDragStabilize::Free
-			|| StabilizeMode == EBSDragStabilize::FreeWithCameraRelatedYaw;
-	}
-
-	void StartDrag(AActor TargetActor, FBSDragParams InDragParams = FBSDragParams())
-	{
-		if (TargetActor == nullptr)
-		{
-			return;
-		}
-
-		if (IsDragging())
-		{
-			Warning("StartDrag while IsDragging() == true");
-			return;
-		}
-
-		SetComponentTickEnabled(true);
-
-		DraggedActor = TargetActor;
-
-		UPrimitiveComponent RootPrimitive = Cast<UPrimitiveComponent>(DraggedActor.RootComponent);
-		if (RootPrimitive == nullptr)
-		{
-			return;
-		}
-
-		DragYawOffset = 0;
-		StabilizeMode = InDragParams.DragStabilizeMode;
-
-		DraggedActor.SetActorTickEnabled(false);
-		RootPrimitive.SetSimulatePhysics(true);
-		RootPrimitive.SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Ignore);
-
-		switch (InDragParams.DragDistanceMode)
-		{
-			case EBSDragDistance::KeepSetDistance:
-				DragDistance = InDragParams.DragDistance;
-				break;
-			case EBSDragDistance::KeepOriginal:
-				DragDistance = InDragParams.DragDistance;
-				break;
-			case EBSDragDistance::KeepClose:
-			{
-				FVector ActorOrigin;
-				FVector ActorExtent;
-				TargetActor.GetActorBounds(true, ActorOrigin, ActorExtent);
-				DragDistance = ActorExtent.Size();
-				break;
-			}
-		}
-
-		PhysicsCarry.LinearStiffness = InDragParams.LinearStiffness;
-		PhysicsCarry.LinearDamping = InDragParams.LinearDamping;
-
-		if (IsFreeMode())
-		{
-			PhysicsCarry.AngularStiffness = 0;
-			PhysicsCarry.AngularDamping = 10;
-		}
-		else
-		{
-			PhysicsCarry.AngularStiffness = InDragParams.AngularStiffness;
-			PhysicsCarry.AngularDamping = InDragParams.AngularDamping;
-		}
-
-		PhysicsCarry.Grab(RootPrimitive);
-
-		APawn OwnerPawn = Cast<APawn>(Owner);
-		UCameraComponent Camera = UCameraComponent::Get(OwnerPawn);
-		if (Camera != nullptr)
-		{
-			CameraRotationOnGrab = Camera.WorldRotation.Quaternion();
-			LastCameraYaw = Camera.WorldRotation.Yaw;
-		}
-
-		if (StabilizeMode == EBSDragStabilize::KeepGlobalUpVector
-			|| StabilizeMode == EBSDragStabilize::KeepGlobalUpVectorWithCameraRelatedYaw)
-		{
-			FRotator UpwardsRotation = RootPrimitive.WorldRotation;
-			UpwardsRotation.Pitch = UpwardsRotation.Roll = 0;
-			RotationOnStart = UpwardsRotation.Quaternion();
-			PhysicsCarry.UpdateTargetRotation(UpwardsRotation);
-		}
-		else if (!IsFreeMode())
-		{
-			RotationOnStart = RootPrimitive.ComponentQuat;
-			PhysicsCarry.UpdateTargetRotation(RootPrimitive.WorldRotation);
-		}
-
-		ABSCharacter Character = Cast<ABSCharacter>(Owner);
-		if (Character != nullptr)
-		{
-			Character.AddStateTag(GameplayTags::Backyard_Interaction_Pickup);
-		}
-
-		AddDragMappingContext();
-	}
-
-	void StopDrag()
-	{
-		if (!IsDragging())
-		{
-			return;
-		}
-
-		SetComponentTickEnabled(false);
-
-		RemoveDragMappingContext();
-		PhysicsCarry.Release();
-
-		UPrimitiveComponent RootPrimitive = Cast<UPrimitiveComponent>(DraggedActor.RootComponent);
-		if (RootPrimitive != nullptr)
-		{
-			RootPrimitive.SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Block);
-		}
-
-		DraggedActor = nullptr;
-
-		ABSCharacter Character = Cast<ABSCharacter>(Owner);
-		if (Character != nullptr)
-		{
-			Character.RemoveStateTag(GameplayTags::Backyard_Interaction_Pickup);
-		}
-	}
-
-	UFUNCTION()
-	void Rotate(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
-	{
-		if (DraggedActor == nullptr)
-		{
-			return;
-		}
-
-		float AxisValue = ActionValue.GetAxis1D();
-		float Delta = AxisValue * RotateSpeed * Gameplay::GetWorldDeltaSeconds();
-
-		if (IsFreeMode())
-		{
-			UPrimitiveComponent RootPrimitive = Cast<UPrimitiveComponent>(DraggedActor.RootComponent);
-			if (RootPrimitive != nullptr)
-			{
-				RootPrimitive.AddTorqueInRadians(FVector::UpVector * Delta * 50.0f, NAME_None, true);
-			}
-		}
-		else
-		{
-			DragYawOffset += Delta;
-			while (DragYawOffset > PI) { DragYawOffset -= PI * 2.0f; }
-			while (DragYawOffset < -PI) { DragYawOffset += PI * 2.0f; }
-		}
-	}
-
+	
 	private void AddDragMappingContext()
 	{
 		APawn OwnerPawn = Cast<APawn>(Owner);
@@ -280,6 +130,152 @@ class UBSDragComponent : UActorComponent
 		}
 	}
 
+	bool IsDragging() const
+	{
+		return DraggedActor != nullptr;
+	}
+
+	void StartDrag(AActor TargetActor, FBSDragParams InDragParams = FBSDragParams())
+	{		
+		ABSCharacter Character = Cast<ABSCharacter>(Owner);
+		if (Character == nullptr)
+		{
+			return;
+		}
+
+		if (TargetActor == nullptr)
+		{
+			return;
+		}
+
+		Character.AddStateTag(GameplayTags::Backyard_Interaction_Pickup);
+		Camera = Character.Camera;
+
+		if (IsDragging())
+		{
+			Warning("StartDrag while IsDragging() == true");
+			return;
+		}
+
+		SetComponentTickEnabled(true);
+
+		DraggedActor = TargetActor;
+
+		UPrimitiveComponent RootPrimitive = Cast<UPrimitiveComponent>(DraggedActor.RootComponent);
+		if (RootPrimitive == nullptr)
+		{
+			return;
+		}
+
+		DragYawOffset = 0;
+
+		StabilizeMode = InDragParams.StabilizationMode;
+		ParentMode = InDragParams.ParentMode;
+
+		DraggedActor.SetActorTickEnabled(false);
+		RootPrimitive.SetSimulatePhysics(true);
+		RootPrimitive.SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Ignore);
+
+		switch (InDragParams.DistanceMode)
+		{
+			case EBSDragDistance::KeepSetDistance:
+				DragDistance = InDragParams.DragDistance;
+				break;
+			case EBSDragDistance::KeepOriginal:
+				DragDistance = InDragParams.DragDistance;
+				break;
+			case EBSDragDistance::KeepClose:
+			{
+				FVector ActorOrigin;
+				FVector ActorExtent;
+				TargetActor.GetActorBounds(true, ActorOrigin, ActorExtent);
+				DragDistance = ActorExtent.Size();
+				break;
+			}
+		}
+
+		PhysicsCarry.LinearStiffness = InDragParams.LinearStiffness;
+		PhysicsCarry.LinearDamping = InDragParams.LinearDamping;
+
+		PhysicsCarry.AngularStiffness = InDragParams.AngularStiffness;
+		PhysicsCarry.AngularDamping = InDragParams.AngularDamping;
+
+		PhysicsCarry.Grab(RootPrimitive);
+
+		
+		if (ParentMode != EBSDragParent::None)
+		{
+			CameraRotationOnGrab = Character.Camera.WorldRotation.Quaternion();
+			LastCameraQuat = CameraRotationOnGrab;
+		}
+
+		if (StabilizeMode == EBSDragStabilize::KeepStraight)
+		{			
+			FRotator TargetItemRotation = FRotator(0, RootPrimitive.WorldRotation.Yaw, 0);
+			TargetItemQuat = TargetItemRotation.Quaternion();
+			PhysicsCarry.UpdateTargetRotation(TargetItemRotation);
+		}
+		else
+		{
+			TargetItemQuat = RootPrimitive.ComponentQuat;
+			PhysicsCarry.UpdateTargetRotation(RootPrimitive.WorldRotation);
+		}
+
+		AddDragMappingContext();
+	}
+
+	void StopDrag()
+	{
+		if (!IsDragging())
+		{
+			return;
+		}
+
+		SetComponentTickEnabled(false);
+
+		RemoveDragMappingContext();
+		PhysicsCarry.Release();
+
+		UPrimitiveComponent RootPrimitive = Cast<UPrimitiveComponent>(DraggedActor.RootComponent);
+		if (RootPrimitive != nullptr)
+		{
+			RootPrimitive.SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Block);
+		}
+
+		DraggedActor = nullptr;
+
+		ABSCharacter Character = Cast<ABSCharacter>(Owner);
+		if (Character != nullptr)
+		{
+			Character.RemoveStateTag(GameplayTags::Backyard_Interaction_Pickup);
+		}
+	}
+
+	UFUNCTION()
+	void Rotate(FInputActionValue ActionValue, float32 ElapsedTime, float32 TriggeredTime, UInputAction SourceAction)
+	{
+		if (DraggedActor == nullptr)
+		{
+			return;
+		}
+
+		float AxisValue = ActionValue.GetAxis1D();
+		float Delta = AxisValue * RotateSpeed;
+
+		if (StabilizeMode == EBSDragStabilize::None)
+		{
+			UPrimitiveComponent RootPrimitive = Cast<UPrimitiveComponent>(DraggedActor.RootComponent);
+			if (RootPrimitive != nullptr)
+			{
+				RootPrimitive.AddTorqueInRadians(FVector::UpVector * Delta / Gameplay::GetWorldDeltaSeconds(), NAME_None, true);
+			}
+		}
+		else
+		{
+			DragYawOffset += Delta * Gameplay::GetWorldDeltaSeconds();
+		}
+	}
+
 	UFUNCTION(BlueprintOverride)
 	void Tick(float DeltaSeconds)
 	{
@@ -288,67 +284,44 @@ class UBSDragComponent : UActorComponent
 		{
 			return;
 		}
-
-		UCameraComponent Camera = UCameraComponent::Get(OwnerPawn);
-		if (Camera == nullptr)
-		{
-			return;
-		}
-
+	
 		FVector TargetLocation = Camera.WorldLocation + Camera.ForwardVector * DragDistance;
 		PhysicsCarry.UpdateTarget(TargetLocation);
 
-		if (IsFreeMode())
-		{
-			TickFreeMode(Camera, DeltaSeconds);
-		}
-		else
-		{
-			TickConstrainedMode(Camera);
-		}
+		SolveConstraints();
+
 	}
-
-	private void TickFreeMode(UCameraComponent Camera, float DeltaSeconds)
-	{
-		if (StabilizeMode != EBSDragStabilize::FreeWithCameraRelatedYaw)
-		{
-			return;
-		}
-
-		UPrimitiveComponent RootPrimitive = Cast<UPrimitiveComponent>(DraggedActor.RootComponent);
-		if (RootPrimitive == nullptr)
-		{
-			return;
-		}
-
-		float CameraYawNow = Camera.WorldRotation.Yaw;
-		float CameraYawDelta = CameraYawNow - LastCameraYaw;
-		while (CameraYawDelta > 180.0f) { CameraYawDelta -= 360.0f; }
-		while (CameraYawDelta < -180.0f) { CameraYawDelta += 360.0f; }
-		LastCameraYaw = CameraYawNow;
-
-		FVector AngularVelocity = RootPrimitive.GetPhysicsAngularVelocityInRadians();
-		AngularVelocity.Z = Math::DegreesToRadians(CameraYawDelta) / DeltaSeconds;
-		RootPrimitive.SetPhysicsAngularVelocityInRadians(AngularVelocity);
-	}
-
-	private void TickConstrainedMode(UCameraComponent Camera)
+	
+	private void SolveConstraints()
 	{
 		FQuat CameraQuat = FQuat::Identity;
 
-		if (StabilizeMode == EBSDragStabilize::KeepRotationRelatedToCamera)
+		if (ParentMode > EBSDragParent::None)
 		{
 			CameraQuat = Camera.WorldRotation.Quaternion() * CameraRotationOnGrab.Inverse();
 		}
-		else if (StabilizeMode == EBSDragStabilize::KeepGlobalUpVectorWithCameraRelatedYaw
-			|| StabilizeMode == EBSDragStabilize::KeepGlobalRotationWithCameraRelatedYaw)
-		{
-			float CameraYawDelta = Camera.WorldRotation.Yaw - CameraRotationOnGrab.Rotator().Yaw;
-			CameraQuat = FQuat(FVector::UpVector, Math::DegreesToRadians(CameraYawDelta));
-		}
 
 		FQuat ManualYaw = FQuat(FVector::UpVector, DragYawOffset);
-		FQuat TargetRotation = CameraQuat * ManualYaw * RotationOnStart;
-		PhysicsCarry.UpdateTargetRotation(TargetRotation.Rotator());
+		FQuat TargetRotation = CameraQuat * ManualYaw * TargetItemQuat;
+
+		if (StabilizeMode == EBSDragStabilize::None)
+		{
+			FQuat CameraFrameDelta = FQuat::Identity;
+
+			if (ParentMode > EBSDragParent::None)
+			{
+				FQuat CameraNow = Camera.WorldRotation.Quaternion();
+				CameraFrameDelta = CameraNow * LastCameraQuat.Inverse();
+				LastCameraQuat = CameraNow;
+			}
+
+			TargetItemQuat = CameraFrameDelta * TargetItemQuat;
+			PhysicsCarry.UpdateTargetRotation(TargetItemQuat.Rotator());
+		}
+		else
+		{
+			PhysicsCarry.UpdateTargetRotation(TargetRotation.Rotator());
+		}		
 	}
+
 }

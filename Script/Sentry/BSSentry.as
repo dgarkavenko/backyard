@@ -10,7 +10,6 @@ class ABSSentry : AActor
 	UBSDragInteraction DragInteraction;
 
 	default DragInteraction.Action.HoldDuration = 1.0f;
-	default DragInteraction.ActionParams.DragStabilizeMode = EBSDragStabilize::KeepGlobalUpVector;
 
 	UPROPERTY(DefaultComponent, RootComponent)
 	UStaticMeshComponent Base;

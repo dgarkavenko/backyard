@@ -27,9 +27,6 @@ class ABSPlayerController : ABFPlayerController
 	UPROPERTY(Category = "Input")
 	UInputAction InteractAction_Tap;
 
-	UPROPERTY(EditAnywhere, Category = "Spawn")
-	TSubclassOf<AActor> PrimarySpawnClass;
-
 	FBSInteractionPromptInfo CurrentPromptInfo;
 	FSBInteractionState InteractionState;
 
@@ -204,20 +201,30 @@ class ABSPlayerController : ABFPlayerController
 			return;
 		}
 
-		UBSInteractionRegistry Focused = InteractorComponent.FocusedInteractable;
-		if (Focused != nullptr)
-		{
-			FGameplayTagContainer InteractorTags = Character.GetCombinedInteractorTags();
-			FBSResolvedAction ToolAction = BSInteraction::ResolveToolAction(Focused, InteractorTags);
+		FBFProjectileSpawnParams Projectile;
+		
+		Projectile.DragType = EBFProjectileDrag::VeryLow;
+		Projectile.Instigator = this;
+		Projectile.Causer = Character;
+		Projectile.Lifetime = 10;
+		Projectile.Position = Character.Camera.WorldLocation + Character.Camera.ForwardVector * 100;
+		Projectile.Velocity = Character.Camera.ForwardVector * 730 * 10;
 
-			if (ToolAction.bValid)
-			{
-				ExecuteResolvedAction(ToolAction, Character);
-				return;
-			}
-		}
+		auto BFProjectileSubsystem = UBFProjectileSubsystem::Get();
+		BFProjectileSubsystem.SpawnProjectile(Projectile);
 
-		SpawnPrimaryActor(Character);
+		// UBSInteractionRegistry Focused = InteractorComponent.FocusedInteractable;
+		// if (Focused != nullptr)
+		// {
+		// 	FGameplayTagContainer InteractorTags = Character.GetCombinedInteractorTags();
+		// 	FBSResolvedAction ToolAction = BSInteraction::ResolveToolAction(Focused, InteractorTags);
+
+		// 	if (ToolAction.bValid)
+		// 	{
+		// 		ExecuteResolvedAction(ToolAction, Character);
+		// 		return;
+		// 	}
+		// }
 	}
 
 	UFUNCTION()
@@ -244,25 +251,6 @@ class ABSPlayerController : ABFPlayerController
 			Resolved.Action.Delegate.ExecuteIfBound(Interactor);
 			bPromptDirty = true;
 		}
-	}
-
-	void SpawnPrimaryActor(ABSCharacter Character)
-	{
-		if (!PrimarySpawnClass.IsValid())
-		{
-			return;
-		}
-
-		FHitResult TraceResult = InteractorComponent.CameraTraceResult;
-		if (!InteractorComponent.bCameraTraceHit)
-		{
-			return;
-		}
-
-		FVector SpawnLocation = TraceResult.ImpactPoint;
-		FRotator SpawnRotation = FRotator(0.0f, Character.GetControlRotation().Yaw, 0.0f);
-
-		SpawnActor(PrimarySpawnClass, SpawnLocation, SpawnRotation);
 	}
 
 	void UpdateDirtyState(ABSCharacter Character)

@@ -24,7 +24,9 @@ public class BackyardForge : ModuleRules
 			"ModularGameplayActors",
 			"ForgeryUI",
 			"GameplayTags",
-			"PhysicsCore"
+			"PhysicsCore",
+			"Niagara",
+			"DeveloperSettings"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
@@ -33,7 +35,9 @@ public class BackyardForge : ModuleRules
 			"BackyardForge",
 			"BackyardForge/Framework",
 			"BackyardForge/Player",
-"BackyardForge/Interaction",
+			"BackyardForge/Interaction",
+			"BackyardForge/Projectile",
+			"BackyardForge/Utility",
 			"BackyardForge/Variant_Shooter",
 			"BackyardForge/Variant_Shooter/AI",
 			"BackyardForge/Variant_Shooter/UI",
