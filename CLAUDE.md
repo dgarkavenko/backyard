@@ -4,7 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**BackyardForge** is a first-person simulator game built on a custom Unreal Engine 5.7 fork with [AngelScript support by Hazelight](https://angelscript.hazelight.se/). It uses a variant-based architecture to prototype different game mechanics (Horror, Shooter, etc.) sharing a common first-person character base.
+**Dead Relay** (working title) is a first-person survival-defense game about maintaining a remote relay tower on a failing frontier line. Built on a custom Unreal Engine 5.7 fork with [AngelScript support by Hazelight](https://angelscript.hazelight.se/).
+
+- **Game concept**: See `DESIGN.md` for the full pitch (setting, pillars, failure structure, core loop)
+- **Development roadmap**: See the Roadmap section in `README.md` for prioritized TODO phases. When the user asks what to work on next, consult this roadmap.
 
 The engine is registered by GUID (`{CDA83A63-4999-9786-3CC3-6CA68D27C361}`) — not a standard Epic launcher install. The UE source lives at `D:\Unreal\ue-as`. Build and run through the custom UE fork's editor or build tools.
 
