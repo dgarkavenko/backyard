@@ -4,15 +4,22 @@ namespace Sentry
 	const FName VisorSocketName = n"s_visor";
 	const FName MagazineSocketName = n"s_magazine";
 	const FName MuzzleSocketName = n"s_muzzle";
+	const FName AssemblyRoleBaseTag = n"Base";
+	const FName AssemblyRoleYawTag = n"Yaw";
+	const FName AssemblyRolePitchTag = n"Pitch";
+	const FName AssemblyRoleMuzzleTag = n"Muzzle";
 }
 
-struct FBSLoadoutElement
+struct FBSModuleAssemblyElement
 {
+	UPROPERTY(EditAnywhere)
+	FName ElementId;
+
 	UPROPERTY(EditAnywhere)
 	UStaticMesh Mesh;
 
 	UPROPERTY(EditAnywhere)
-	FGameplayTag Tag;
+	TArray<FName> Tags;
 
 	UPROPERTY(EditAnywhere)
 	FName Socket;
@@ -20,8 +27,20 @@ struct FBSLoadoutElement
 	UPROPERTY(EditAnywhere)
 	FVector Offset;
 
-	UPROPERTY(EditAnywhere, meta = (ClampMin = "-1"))
-	int ParentIndex = -1;
+	UPROPERTY(EditAnywhere)
+	FRotator Rotation;
+
+	UPROPERTY(EditAnywhere)
+	FName ParentElementId;
+}
+
+struct FBSChassisRotatorSpec
+{
+	UPROPERTY(EditAnywhere)
+	FName ElementId;
+
+	UPROPERTY(EditAnywhere)
+	FBSSentryConstraint Constraint;
 }
 
 struct FBSSentryConstraint

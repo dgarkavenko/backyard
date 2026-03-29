@@ -1,20 +1,33 @@
+struct FBSBuiltAssemblyElement
+{
+	FName ElementId;
+	USceneComponent Component;
+}
+
+struct FBSBuiltModuleView
+{
+	TArray<FBSBuiltAssemblyElement> Elements;
+	USceneComponent PrimaryComponent;
+}
+
 class UBSSentryVisualAdapter : UActorComponent
 {
-	TArray<UStaticMeshComponent> LoadoutElements;
-	TArray<UStaticMeshComponent> ChassisElements;
+	TArray<UStaticMeshComponent> ModuleElementPool;
+	TArray<int> ModuleElementGenerations;
+	TArray<UStaticMeshComponent> ActiveModuleElements;
+
 	TMap<FName, USceneComponent> SocketOwnerCache;
 
 	UStaticMeshComponent YawPivot;
 	UStaticMeshComponent PitchPivot;
+	USceneComponent MuzzleComponent;
 
-	int ElementCounter = 0;
-	int LastCompositionVersion = -1;
+	int RebuildGeneration = 0;
 
-	UBSChassisDefinition ActiveChassis;
-
+	FBSSentryConstraint YawConstraint;
+	FBSSentryConstraint PitchConstraint;
 	FVector YawPivotOffset;
 	FVector PitchPivotOffset;
-	USceneComponent MuzzleComponent;
 	FVector MuzzleOffset;
 	FRotator MuzzleForwardRotation;
 
@@ -45,13 +58,12 @@ class UBSSentryVisualAdapter : UActorComponent
 			return;
 		}
 
-		LastCompositionVersion = ModularComponent.CompositionVersion;
 		SentryAssembly::Rebuild(this, Sentry, ModularComponent, Sentry.Material);
 	}
 
 	bool HasAimRig() const
 	{
-		return ActiveChassis != nullptr && YawPivot != nullptr && PitchPivot != nullptr;
+		return YawPivot != nullptr && PitchPivot != nullptr;
 	}
 
 	USceneComponent GetDefaultAttachParent(ABSSentry Sentry) const
@@ -74,163 +86,312 @@ namespace SentryAssembly
 {
 	void Rebuild(UBSSentryVisualAdapter Adapter, ABSSentry Sentry, UBSModularComponent ModularComponent, UMaterialInterface Material)
 	{
-		ClearMeshes(Adapter, Sentry);
+		BeginRebuild(Adapter, Sentry);
+		SentryDebug::LogAssembly(f"Assembly: rebuild sentry='{Sentry.GetName()}' modules={ModularComponent.InstalledModules.Num()}");
 
-		Adapter.ActiveChassis = FindChassis(ModularComponent);
-		if (Adapter.ActiveChassis != nullptr)
+		TArray<FBSBuiltModuleView> InstalledModuleViews;
+		for (int Index = 0; Index < ModularComponent.InstalledModules.Num(); Index++)
 		{
-			BuildChassis(Adapter.ActiveChassis, Adapter, Sentry, Material);
+			InstalledModuleViews.Add(FBSBuiltModuleView());
 		}
 
-		for (UBFModuleDefinition Module : ModularComponent.InstalledModules)
+		for (int ModuleIndex = 0; ModuleIndex < ModularComponent.InstalledModules.Num(); ModuleIndex++)
 		{
+			UBSModuleDefinition Module = Cast<UBSModuleDefinition>(ModularComponent.InstalledModules[ModuleIndex]);
 			if (Module == nullptr)
 			{
+				UBFModuleDefinition RawModule = ModularComponent.InstalledModules[ModuleIndex];
+				FString RawModuleName = RawModule != nullptr ? RawModule.GetName().ToString() : "<none>";
+				SentryDebug::LogAssembly(f"Assembly: skipping non-script module '{RawModuleName}'");
 				continue;
 			}
 
-			auto TurretDefinition = Cast<UBSTurretDefinition>(Module);
-			if (TurretDefinition != nullptr)
-			{
-				AppendLoadout(TurretDefinition.Elements, Adapter, Sentry, Material);
-				continue;
-			}
+			int OccupiedSlotIndex = ModularComponent.GetOccupiedSlotIndexForModuleIndex(ModuleIndex);
+			FBSBuiltModuleView BuiltView;
 
-			auto GenericDefinition = Cast<UBSGenericModule>(Module);
-			if (GenericDefinition != nullptr && GenericDefinition.BaseMesh != nullptr)
-			{
-				FName Socket = ResolveOccupiedSocket(ModularComponent, Module);
-				AttachModuleMesh(GenericDefinition.BaseMesh, Socket, Adapter, Sentry, Material);
-			}
-		}
+			FName Socket = OccupiedSlotIndex >= 0 ? ModularComponent.Slots[OccupiedSlotIndex].Socket : NAME_None;
+			USceneComponent PreferredOwner = ResolveSlotOwner(ModularComponent, OccupiedSlotIndex, InstalledModuleViews, Adapter, Sentry);
+			BuiltView = BuildModuleElements(Module, PreferredOwner, Socket, Adapter, Sentry, Material);
 
-		CacheGeometry(Adapter, Sentry);
-	}
-
-	UBSChassisDefinition FindChassis(UBSModularComponent ModularComponent)
-	{
-		for (UBFModuleDefinition Module : ModularComponent.InstalledModules)
-		{
 			auto ChassisDefinition = Cast<UBSChassisDefinition>(Module);
 			if (ChassisDefinition != nullptr)
 			{
-				return ChassisDefinition;
+				CacheChassis(ChassisDefinition, BuiltView, Adapter);
+			}
+
+			InstalledModuleViews[ModuleIndex] = BuiltView;
+		}
+
+		FinishRebuild(Adapter, Sentry);
+		CacheGeometry(Adapter, Sentry);
+		FString BaseMeshName = Sentry.Base != nullptr && Sentry.Base.StaticMesh != nullptr ? Sentry.Base.StaticMesh.GetName().ToString() : "<none>";
+		FString YawName = Adapter.YawPivot != nullptr ? Adapter.YawPivot.GetName().ToString() : "<none>";
+		FString PitchName = Adapter.PitchPivot != nullptr ? Adapter.PitchPivot.GetName().ToString() : "<none>";
+		FString MuzzleName = Adapter.MuzzleComponent != nullptr ? Adapter.MuzzleComponent.GetName().ToString() : "<none>";
+		SentryDebug::LogAssembly(f"Assembly | Rebuild Complete Sentry='{Sentry.GetName()}' BaseMesh='{BaseMeshName}' Rotator0='{YawName}' Rotator1='{PitchName}' Muzzle='{MuzzleName}' ActiveElements={Adapter.ActiveModuleElements.Num()}");
+		ValidateNoGarbageComponents(Adapter, Sentry);
+	}
+
+	void BeginRebuild(UBSSentryVisualAdapter Adapter, ABSSentry Sentry)
+	{
+		Adapter.RebuildGeneration++;
+		Adapter.SocketOwnerCache.Empty();
+		Adapter.YawPivot = nullptr;
+		Adapter.PitchPivot = nullptr;
+		Adapter.MuzzleComponent = nullptr;
+		Adapter.YawConstraint = FBSSentryConstraint();
+		Adapter.PitchConstraint = FBSSentryConstraint();
+		Adapter.YawPivotOffset = FVector::ZeroVector;
+		Adapter.PitchPivotOffset = FVector::ZeroVector;
+		Adapter.MuzzleOffset = FVector::ZeroVector;
+		Adapter.MuzzleForwardRotation = FRotator(0, 0, 0);
+		Adapter.ActiveModuleElements.Empty();
+
+		Sentry.Base.SetStaticMesh(nullptr);
+		Sentry.Base.SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	void FinishRebuild(UBSSentryVisualAdapter Adapter, ABSSentry Sentry)
+	{
+		DeactivateUnusedPoolComponents(Adapter.ModuleElementPool, Adapter.ModuleElementGenerations, Adapter.RebuildGeneration, Sentry);
+	}
+
+	void CacheChassis(UBSChassisDefinition Definition, FBSBuiltModuleView BuitView, UBSSentryVisualAdapter Adapter)
+	{
+		if (Definition.Rotators.Num() > 0)
+		{
+			USceneComponent FirstRotator = FindBuiltElementById(BuitView, Definition.Rotators[0].ElementId);
+			Adapter.YawPivot = Cast<UStaticMeshComponent>(FirstRotator);
+			if (Adapter.YawPivot != nullptr)
+			{
+				Adapter.YawConstraint = Definition.Rotators[0].Constraint;
+			}
+			else
+			{
+				Warning(f"SentryAssembly could not resolve first rotator '{Definition.Rotators[0].ElementId}' on chassis '{Definition.GetName()}'");
+			}
+		}
+
+		if (Definition.Rotators.Num() > 1)
+		{
+			USceneComponent SecondRotator = FindBuiltElementById(BuitView, Definition.Rotators[1].ElementId);
+			Adapter.PitchPivot = Cast<UStaticMeshComponent>(SecondRotator);
+			if (Adapter.PitchPivot != nullptr)
+			{
+				Adapter.PitchConstraint = Definition.Rotators[1].Constraint;
+			}
+			else
+			{
+				Warning(f"SentryAssembly could not resolve second rotator '{Definition.Rotators[1].ElementId}' on chassis '{Definition.GetName()}'");
+			}
+		}
+		else
+		{
+			Adapter.PitchPivot = Adapter.YawPivot;
+			Adapter.PitchConstraint = Adapter.YawConstraint;
+		}
+	}
+
+	FBSBuiltModuleView BuildModuleElements(UBSModuleDefinition Definition, USceneComponent RootOwner, FName RootSocket, UBSSentryVisualAdapter Adapter, ABSSentry Sentry, UMaterialInterface Material)
+	{
+		FBSBuiltModuleView View;
+		if (Definition == nullptr)
+		{
+			return View;
+		}
+
+		if (Definition.Elements.Num() == 0)
+		{
+			Warning(f"SentryAssembly module '{Definition.GetName()}' has no Elements to build");
+			return View;
+		}
+
+		FName BaseElementId = NAME_None;
+
+		TArray<bool> BuiltStates;
+		BuiltStates.SetNum(Definition.Elements.Num());
+
+		int BuiltCount = 0;
+		while (BuiltCount < Definition.Elements.Num())
+		{
+			bool bBuiltAny = false;
+
+			for (int ElementIndex = 0; ElementIndex < Definition.Elements.Num(); ElementIndex++)
+			{
+				if (BuiltStates[ElementIndex])
+				{
+					continue;
+				}
+
+				const FBSModuleAssemblyElement& Element = Definition.Elements[ElementIndex];
+				if (Element.Mesh == nullptr)
+				{
+					Warning(f"SentryAssembly element '{Element.ElementId}' in module '{Definition.GetName()}' has no mesh");
+				}
+				USceneComponent AttachParent = RootOwner;
+				FName AttachSocket = RootSocket != NAME_None ? RootSocket : Element.Socket;
+
+				if (Element.ParentElementId != NAME_None)
+				{
+					if (Element.ParentElementId == BaseElementId)
+					{
+						AttachParent = Sentry.Base;
+					}
+					else
+					{
+						AttachParent = FindBuiltElementById(View, Element.ParentElementId);
+						if (AttachParent == nullptr)
+						{
+							continue;
+						}
+					}
+
+					AttachSocket = Element.Socket;
+				}
+				else if (AttachParent == nullptr)
+				{
+					AttachParent = Adapter.GetDefaultAttachParent(Sentry);
+					AttachSocket = Element.Socket;
+				}
+
+				UStaticMeshComponent Component = AcquireModuleElement(Adapter, Sentry);
+				SetupAssemblyElement(Component, AttachParent, AttachSocket, Element, Material, Sentry);
+				RegisterBuiltElement(View, Element, Component);
+				
+				FString AttachParentName = AttachParent != nullptr ? AttachParent.GetName().ToString() : "<none>";
+				FString MeshName = Component != nullptr && Component.StaticMesh != nullptr ? Component.StaticMesh.GetName().ToString() : "<none>";
+				SentryDebug::LogAssembly(f"Assembly| Built from '{Definition.GetName()}' | '{Element.ElementId}' as '{Component.GetName()}' Parent: '{AttachParentName}' Socket: '{AttachSocket}' Mesh: '{MeshName}'");
+
+				BuiltStates[ElementIndex] = true;
+				BuiltCount++;
+				bBuiltAny = true;
+			}
+
+			if (!bBuiltAny)
+			{
+				for (int ElementIndex = 0; ElementIndex < Definition.Elements.Num(); ElementIndex++)
+				{
+					if (!BuiltStates[ElementIndex])
+					{
+						Warning(f"Sentry assembly could not resolve parent '{Definition.Elements[ElementIndex].ParentElementId}' for element '{Definition.Elements[ElementIndex].ElementId}' in module '{Definition.GetName()}'");
+					}
+				}
+				break;
+			}
+		}
+
+		return View;
+	}
+
+	USceneComponent ResolveSlotOwner(UBSModularComponent ModularComponent, int SlotIndex, const TArray<FBSBuiltModuleView>& InstalledModuleViews, UBSSentryVisualAdapter Adapter, ABSSentry Sentry)
+	{
+		// meaning root
+		if (SlotIndex < 0)
+		{
+			return Sentry.Base;
+		}
+
+		if (SlotIndex >= ModularComponent.Slots.Num())
+		{
+			return nullptr;
+		}
+
+		FName Socket = ModularComponent.Slots[SlotIndex].Socket;
+		int ProviderModuleIndex = ModularComponent.GetSlotProviderModuleIndex(SlotIndex);
+		if (ProviderModuleIndex >= 0 && ProviderModuleIndex < InstalledModuleViews.Num())
+		{
+			USceneComponent PreferredOwner = FindBuiltSocketOwner(InstalledModuleViews[ProviderModuleIndex], Socket);
+			if (PreferredOwner != nullptr)
+			{
+				return PreferredOwner;
+			}
+
+			return InstalledModuleViews[ProviderModuleIndex].PrimaryComponent;
+		}
+
+		return FindSocketOwner(Adapter, Sentry, Socket);
+	}
+
+	void RegisterBuiltElement(FBSBuiltModuleView& View, const FBSModuleAssemblyElement& Element, USceneComponent Component)
+	{
+		FBSBuiltAssemblyElement BuiltElement;
+		BuiltElement.ElementId = Element.ElementId;
+		BuiltElement.Component = Component;
+		View.Elements.Add(BuiltElement);
+
+		if (View.PrimaryComponent == nullptr)
+		{
+			View.PrimaryComponent = Component;
+		}
+	}
+
+	USceneComponent FindBuiltElementById(const FBSBuiltModuleView& View, FName ElementId)
+	{
+		for (const FBSBuiltAssemblyElement& BuiltElement : View.Elements)
+		{
+			if (BuiltElement.ElementId == ElementId)
+			{
+				return BuiltElement.Component;
 			}
 		}
 
 		return nullptr;
 	}
 
-	FName ResolveOccupiedSocket(UBSModularComponent ModularComponent, UBFModuleDefinition Module)
+	USceneComponent FindBuiltSocketOwner(const FBSBuiltModuleView& View, FName Socket)
 	{
-		for (int SlotIndex = 0; SlotIndex < ModularComponent.SlotModuleIndices.Num(); SlotIndex++)
+		if (Socket == NAME_None)
 		{
-			UBFModuleDefinition Occupant = ModularComponent.GetModuleForSlot(SlotIndex);
-			if (Occupant == Module)
+			return nullptr;
+		}
+
+		for (const FBSBuiltAssemblyElement& BuiltElement : View.Elements)
+		{
+			if (BuiltElement.Component != nullptr && BuiltElement.Component.DoesSocketExist(Socket))
 			{
-				return ModularComponent.Slots[SlotIndex].Socket;
+				return BuiltElement.Component;
 			}
 		}
 
-		return NAME_None;
+		return nullptr;
 	}
 
-	void BuildChassis(UBSChassisDefinition Definition, UBSSentryVisualAdapter Adapter, ABSSentry Sentry, UMaterialInterface Material)
+	void SetupAssemblyElement(UStaticMeshComponent Component, USceneComponent AttachParent, FName AttachSocket, const FBSModuleAssemblyElement& Element, UMaterialInterface Material, ABSSentry Sentry)
 	{
-		EnsurePivotComponents(Adapter, Sentry);
-
-		Sentry.Base.SetStaticMesh(Definition.BaseMesh);
-		Adapter.YawPivot.SetStaticMesh(Definition.Rotator01Mesh);
-		Adapter.PitchPivot.SetStaticMesh(Definition.Rotator02Mesh);
-
-		Adapter.YawPivot.DetachFromParent();
-		Adapter.PitchPivot.DetachFromParent();
-
-		Adapter.YawPivot.AttachTo(Sentry.Base, Sentry::ChildSocketName);
-		Adapter.PitchPivot.AttachTo(Adapter.YawPivot, Sentry::ChildSocketName);
-
-		Adapter.YawPivot.SetRelativeRotation(FRotator(0, 0, 0));
-		Adapter.PitchPivot.SetRelativeRotation(FRotator(0, 0, 0));
-
-		ApplyMaterial(Sentry.Base, Material);
-		ApplyMaterial(Adapter.YawPivot, Material);
-		ApplyMaterial(Adapter.PitchPivot, Material);
-
-		BuildChassisElements(Definition, Adapter, Sentry, Material);
-	}
-
-	void EnsurePivotComponents(UBSSentryVisualAdapter Adapter, ABSSentry Sentry)
-	{
-		if (Adapter.YawPivot == nullptr)
+		if (Component == nullptr)
 		{
-			Adapter.YawPivot = UStaticMeshComponent::Create(Sentry, n"SentryYawPivot");
-			Adapter.YawPivot.AttachTo(Sentry.Base);
+			return;
 		}
 
-		if (Adapter.PitchPivot == nullptr)
+		Component.SetStaticMesh(Element.Mesh);
+		ApplyMaterial(Component, Material);
+
+		if (AttachParent != nullptr && AttachParent != Component && AttachSocket != NAME_None)
 		{
-			Adapter.PitchPivot = UStaticMeshComponent::Create(Sentry, n"SentryPitchPivot");
-			Adapter.PitchPivot.AttachTo(Adapter.YawPivot);
+			Component.DetachFromParent();
+			Component.AttachTo(AttachParent, AttachSocket);
 		}
-	}
-
-	void BuildChassisElements(UBSChassisDefinition Definition, UBSSentryVisualAdapter Adapter, ABSSentry Sentry, UMaterialInterface Material)
-	{
-		for (UStaticMeshComponent Element : Adapter.ChassisElements)
+		else if (AttachParent != nullptr && AttachParent != Component)
 		{
-			Element.DestroyComponent(Sentry);
+			Component.DetachFromParent();
+			Component.AttachTo(AttachParent);
 		}
-		Adapter.ChassisElements.Empty();
-
-		if (Definition.PlatformMesh != nullptr)
+		else if (Component != Sentry.Base)
 		{
-			++Adapter.ElementCounter;
-			UStaticMeshComponent Platform = UStaticMeshComponent::Create(Sentry, FName(f"ChassisElement_{Adapter.ElementCounter}"));
-			Platform.SetStaticMesh(Definition.PlatformMesh);
-			Platform.AttachTo(Adapter.YawPivot != nullptr ? Adapter.YawPivot : Sentry.Base);
-
-			float PlatformHeight = Platform.StaticMesh.BoundingBox.Extent.Z;
-			Platform.RelativeLocation = FVector(0, 0, -PlatformHeight);
-			ApplyMaterial(Platform, Material);
-
-			Adapter.ChassisElements.Add(Platform);
+			Component.DetachFromParent();
+			Component.AttachTo(Sentry.Base);
 		}
-	}
 
-	void AppendLoadout(const TArray<FBSLoadoutElement>& Elements, UBSSentryVisualAdapter Adapter, ABSSentry Sentry, UMaterialInterface Material)
-	{
-		for (int Index = 0; Index < Elements.Num(); Index++)
+		if (Component != Sentry.Base)
 		{
-			const FBSLoadoutElement& Element = Elements[Index];
-
-			++Adapter.ElementCounter;
-			UStaticMeshComponent Component = UStaticMeshComponent::Create(Sentry, FName(f"LoadoutElement_{Adapter.ElementCounter}"));
-			Component.SetStaticMesh(Element.Mesh);
-			ApplyMaterial(Component, Material);
-
-			USceneComponent ParentTo = Adapter.GetDefaultAttachParent(Sentry);
-			if (Element.ParentIndex >= 0 && Element.ParentIndex < Adapter.LoadoutElements.Num())
-			{
-				ParentTo = Adapter.LoadoutElements[Element.ParentIndex];
-			}
-
-			if (Element.Socket != NAME_None)
-			{
-				Component.AttachTo(ParentTo, Element.Socket);
-			}
-			else
-			{
-				Component.AttachTo(ParentTo);
-			}
-
 			Component.RelativeLocation = Element.Offset;
-			Adapter.LoadoutElements.Add(Component);
+			Component.SetRelativeRotation(Element.Rotation);
 		}
+		Component.SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 
 	void CacheGeometry(UBSSentryVisualAdapter Adapter, ABSSentry Sentry)
 	{
-		Adapter.MuzzleComponent = nullptr;
 		Adapter.YawPivotOffset = FVector::ZeroVector;
 		Adapter.PitchPivotOffset = FVector::ZeroVector;
 		Adapter.MuzzleOffset = FVector::ZeroVector;
@@ -238,37 +399,36 @@ namespace SentryAssembly
 
 		if (Adapter.YawPivot == nullptr || Adapter.PitchPivot == nullptr)
 		{
+			FString YawName = Adapter.YawPivot != nullptr ? Adapter.YawPivot.GetName().ToString() : "<none>";
+			FString PitchName = Adapter.PitchPivot != nullptr ? Adapter.PitchPivot.GetName().ToString() : "<none>";
+			SentryDebug::LogAssembly(f"Assembly: missing rotator chain sentry='{Sentry.GetName()}' rotator0='{YawName}' rotator1='{PitchName}'");
 			return;
 		}
 
-		FVector BasePivotWorld = Sentry.Base.DoesSocketExist(Sentry::ChildSocketName)
-			? Sentry.Base.GetSocketLocation(Sentry::ChildSocketName)
-			: Adapter.YawPivot.WorldLocation;
-		Adapter.YawPivotOffset = Sentry.Base.WorldTransform.InverseTransformPosition(BasePivotWorld);
+		Adapter.YawPivotOffset = Sentry.Base.WorldTransform.InverseTransformPosition(Adapter.YawPivot.WorldLocation);
+		Adapter.PitchPivotOffset = Adapter.YawPivot.WorldTransform.InverseTransformPosition(Adapter.PitchPivot.WorldLocation);
 
-		FVector PitchPivotWorld = Adapter.YawPivot.DoesSocketExist(Sentry::ChildSocketName)
-			? Adapter.YawPivot.GetSocketLocation(Sentry::ChildSocketName)
-			: Adapter.PitchPivot.WorldLocation;
-		Adapter.PitchPivotOffset = Adapter.YawPivot.WorldTransform.InverseTransformPosition(PitchPivotWorld);
-
-		TArray<USceneComponent> AllChildren;
-		Adapter.PitchPivot.GetChildrenComponents(true, AllChildren);
-
-		for (USceneComponent Child : AllChildren)
+		if (Adapter.MuzzleComponent == nullptr)
 		{
-			if (Child.DoesSocketExist(Sentry::MuzzleSocketName))
+			TArray<USceneComponent> AllChildren;
+			Adapter.PitchPivot.GetChildrenComponents(true, AllChildren);
+
+			for (USceneComponent Child : AllChildren)
 			{
-				Adapter.MuzzleComponent = Child;
-				break;
+				if (Child.DoesSocketExist(Sentry::MuzzleSocketName))
+				{
+					Adapter.MuzzleComponent = Child;
+					break;
+				}
+			}
+
+			if (Adapter.MuzzleComponent == nullptr && Adapter.PitchPivot.DoesSocketExist(Sentry::MuzzleSocketName))
+			{
+				Adapter.MuzzleComponent = Adapter.PitchPivot;
 			}
 		}
 
-		if (Adapter.MuzzleComponent == nullptr && Adapter.PitchPivot.DoesSocketExist(Sentry::MuzzleSocketName))
-		{
-			Adapter.MuzzleComponent = Adapter.PitchPivot;
-		}
-
-		if (Adapter.MuzzleComponent != nullptr)
+		if (Adapter.MuzzleComponent != nullptr && Adapter.MuzzleComponent.DoesSocketExist(Sentry::MuzzleSocketName))
 		{
 			FTransform MuzzleSocketWorld = Adapter.MuzzleComponent.GetSocketTransform(Sentry::MuzzleSocketName);
 			Adapter.MuzzleOffset = Adapter.PitchPivot.WorldTransform.InverseTransformPosition(MuzzleSocketWorld.Location);
@@ -277,38 +437,64 @@ namespace SentryAssembly
 		}
 	}
 
-	void ClearMeshes(UBSSentryVisualAdapter Adapter, ABSSentry Sentry)
+	UStaticMeshComponent AcquireModuleElement(UBSSentryVisualAdapter Adapter, ABSSentry Sentry)
 	{
-		Adapter.SocketOwnerCache.Empty();
-		Adapter.ActiveChassis = nullptr;
-		Adapter.MuzzleComponent = nullptr;
-		Adapter.ElementCounter = 0;
-
-		Sentry.Base.SetStaticMesh(nullptr);
-
-		if (Adapter.YawPivot != nullptr)
+		for (int Index = 0; Index < Adapter.ModuleElementPool.Num(); Index++)
 		{
-			Adapter.YawPivot.SetStaticMesh(nullptr);
-			Adapter.YawPivot.SetRelativeRotation(FRotator(0, 0, 0));
+			if (Adapter.ModuleElementGenerations[Index] != Adapter.RebuildGeneration)
+			{
+				Adapter.ModuleElementGenerations[Index] = Adapter.RebuildGeneration;
+				UStaticMeshComponent Component = Adapter.ModuleElementPool[Index];
+				PreparePooledComponent(Component);
+				Adapter.ActiveModuleElements.Add(Component);
+				return Component;
+			}
 		}
 
-		if (Adapter.PitchPivot != nullptr)
+		UStaticMeshComponent Created = UStaticMeshComponent::Create(Sentry, FName(f"ModulePool_{Adapter.ModuleElementPool.Num()}"));
+		PreparePooledComponent(Created);
+		Adapter.ModuleElementPool.Add(Created);
+		Adapter.ModuleElementGenerations.Add(Adapter.RebuildGeneration);
+		Adapter.ActiveModuleElements.Add(Created);
+		return Created;
+	}
+
+	void DeactivateUnusedPoolComponents(TArray<UStaticMeshComponent>& Pool, TArray<int>& Generations, int CurrentGeneration, ABSSentry Sentry)
+	{
+		for (int Index = 0; Index < Pool.Num(); Index++)
 		{
-			Adapter.PitchPivot.SetStaticMesh(nullptr);
-			Adapter.PitchPivot.SetRelativeRotation(FRotator(0, 0, 0));
+			if (Generations[Index] == CurrentGeneration)
+			{
+				continue;
+			}
+
+			DeactivatePooledComponent(Pool[Index], Sentry);
+		}
+	}
+
+	void PreparePooledComponent(UStaticMeshComponent Component)
+	{
+		if (Component == nullptr)
+		{
+			return;
 		}
 
-		for (UStaticMeshComponent Element : Adapter.ChassisElements)
-		{
-			Element.DestroyComponent(Sentry);
-		}
-		Adapter.ChassisElements.Empty();
+		Component.SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
 
-		for (UStaticMeshComponent Element : Adapter.LoadoutElements)
+	void DeactivatePooledComponent(UStaticMeshComponent Component, ABSSentry Sentry)
+	{
+		if (Component == nullptr)
 		{
-			Element.DestroyComponent(Sentry);
+			return;
 		}
-		Adapter.LoadoutElements.Empty();
+
+		Component.SetStaticMesh(nullptr);
+		Component.DetachFromParent();
+		Component.AttachTo(Sentry.Base);
+		Component.RelativeLocation = FVector::ZeroVector;
+		Component.SetRelativeRotation(FRotator(0, 0, 0));
+		Component.SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 
 	USceneComponent FindSocketOwner(UBSSentryVisualAdapter Adapter, ABSSentry Sentry, FName Socket)
@@ -334,24 +520,8 @@ namespace SentryAssembly
 		{
 			return Sentry.Base;
 		}
-		if (Adapter.YawPivot != nullptr && Adapter.YawPivot.DoesSocketExist(Socket))
-		{
-			return Adapter.YawPivot;
-		}
-		if (Adapter.PitchPivot != nullptr && Adapter.PitchPivot.DoesSocketExist(Socket))
-		{
-			return Adapter.PitchPivot;
-		}
 
-		for (UStaticMeshComponent Element : Adapter.ChassisElements)
-		{
-			if (Element.DoesSocketExist(Socket))
-			{
-				return Element;
-			}
-		}
-
-		for (UStaticMeshComponent Element : Adapter.LoadoutElements)
+		for (UStaticMeshComponent Element : Adapter.ActiveModuleElements)
 		{
 			if (Element.DoesSocketExist(Socket))
 			{
@@ -362,30 +532,57 @@ namespace SentryAssembly
 		return nullptr;
 	}
 
-	UStaticMeshComponent AttachModuleMesh(UStaticMesh ModuleMesh, FName Socket, UBSSentryVisualAdapter Adapter, ABSSentry Sentry, UMaterialInterface Material)
+	void ValidateNoGarbageComponents(UBSSentryVisualAdapter Adapter, ABSSentry Sentry)
 	{
-		if (ModuleMesh == nullptr)
-		{
-			return nullptr;
-		}
+		ValidatePoolState(Adapter.ModuleElementPool, Adapter.ActiveModuleElements);
 
-		++Adapter.ElementCounter;
-		UStaticMeshComponent Component = UStaticMeshComponent::Create(Sentry, FName(f"ModuleElement_{Adapter.ElementCounter}"));
-		Component.SetStaticMesh(ModuleMesh);
-		ApplyMaterial(Component, Material);
+		TArray<USceneComponent> AttachedComponents;
+		Sentry.Base.GetChildrenComponents(true, AttachedComponents);
 
-		USceneComponent SocketOwner = FindSocketOwner(Adapter, Sentry, Socket);
-		if (SocketOwner != nullptr)
+		for (USceneComponent Child : AttachedComponents)
 		{
-			Component.AttachTo(SocketOwner, Socket);
-		}
-		else
-		{
-			Component.AttachTo(Adapter.GetDefaultAttachParent(Sentry));
-		}
+			UStaticMeshComponent MeshComponent = Cast<UStaticMeshComponent>(Child);
+			if (MeshComponent == nullptr)
+			{
+				continue;
+			}
 
-		Adapter.LoadoutElements.Add(Component);
-		return Component;
+			if (!IsManagedDynamicComponent(Adapter, MeshComponent))
+			{
+				FString Name = MeshComponent.GetName().ToString();
+				if (Name.Contains("ModulePool_"))
+				{
+					Warning(f"Sentry rebuild garbage assert: unmanaged pooled component '{Name}' attached to {Sentry.GetName()}");
+				}
+			}
+		}
+	}
+
+	void ValidatePoolState(const TArray<UStaticMeshComponent>& Pool, const TArray<UStaticMeshComponent>& ActivePool)
+	{
+		for (UStaticMeshComponent Component : Pool)
+		{
+			if (Component == nullptr)
+			{
+				continue;
+			}
+
+			bool bIsActive = ActivePool.Contains(Component);
+			if (bIsActive && Component.StaticMesh == nullptr)
+			{
+				Warning(f"Sentry rebuild garbage assert: active module component '{Component.GetName()}' has no mesh");
+			}
+
+			if (!bIsActive && Component.StaticMesh != nullptr)
+			{
+				Warning(f"Sentry rebuild garbage assert: stale module component '{Component.GetName()}' still has mesh '{Component.StaticMesh.GetName()}'");
+			}
+		}
+	}
+
+	bool IsManagedDynamicComponent(UBSSentryVisualAdapter Adapter, UStaticMeshComponent Component)
+	{
+		return Adapter.ModuleElementPool.Contains(Component);
 	}
 
 	void ApplyMaterial(UStaticMeshComponent Component, UMaterialInterface Material)

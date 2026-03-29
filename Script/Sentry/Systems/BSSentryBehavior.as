@@ -1,6 +1,15 @@
 namespace SentryDebug
 {
 	const FConsoleVariable ShowSockets(f"BF.Sentry.ShowSockets", 0);
+	const FConsoleVariable LogAssemblyCVar(f"BF.Sentry.LogAssembly", 0);
+
+	void LogAssembly(FString Message)
+	{
+		if (LogAssemblyCVar.Int > 0)
+		{
+			Log(Message);
+		}
+	}
 
 	void DrawSockets(ABSSentry Sentry)
 	{
@@ -10,7 +19,10 @@ namespace SentryDebug
 		}
 
 		int SlotCount = Sentry.ModularComponent.Slots.Num();
-		System::DrawDebugString(Sentry.ActorLocation + FVector(0, 0, 50), f"Slots: {SlotCount}", nullptr, FLinearColor::White);
+		FString BaseMeshName = Sentry.Base != nullptr && Sentry.Base.StaticMesh != nullptr ? Sentry.Base.StaticMesh.GetName().ToString() : "None";
+		FString Header = f"Slots: {SlotCount} Modules: {Sentry.ModularComponent.InstalledModules.Num()} Base: {BaseMeshName}";
+		System::DrawDebugString(Sentry.ActorLocation + FVector(0, 0, 50), Header, nullptr, FLinearColor::White);
+		System::DrawDebugString(Sentry.ActorLocation + FVector(0, 0, 70), f"Yaw: {Sentry.VisualAdapter.YawPivot != nullptr} Pitch: {Sentry.VisualAdapter.PitchPivot != nullptr} Muzzle: {Sentry.VisualAdapter.MuzzleComponent != nullptr}", nullptr, FLinearColor::White);
 
 		for (int SlotIndex = 0; SlotIndex < SlotCount; SlotIndex++)
 		{
@@ -48,9 +60,9 @@ namespace SentryDebug
 
 namespace SentryAim
 {
-	void Update(ABSSentry Sentry, UBSSentryVisualAdapter Adapter, UBSChassisDefinition ChassisDef, FVector TargetLocation, float DeltaSeconds)
+	void Update(ABSSentry Sentry, UBSSentryVisualAdapter Adapter, FVector TargetLocation, float DeltaSeconds)
 	{
-		if (Adapter == nullptr || ChassisDef == nullptr || !Adapter.HasAimRig())
+		if (Adapter == nullptr || !Adapter.HasAimRig())
 		{
 			return;
 		}
@@ -63,7 +75,7 @@ namespace SentryAim
 		FRotator Constrained = Sentry::ConstrainRotation(
 			Adapter.YawPivot.RelativeRotation,
 			LocalDirection.Rotation(),
-			ChassisDef.Rotator01Constraint,
+			Adapter.YawConstraint,
 			DeltaSeconds
 		);
 		Adapter.YawPivot.SetRelativeRotation(Constrained);
@@ -77,7 +89,7 @@ namespace SentryAim
 			Constrained = Sentry::ConstrainRotation(
 				Adapter.PitchPivot.RelativeRotation,
 				DesiredRotation,
-				ChassisDef.Rotator02Constraint,
+				Adapter.PitchConstraint,
 				DeltaSeconds
 			);
 		}
@@ -89,7 +101,7 @@ namespace SentryAim
 			Constrained = Sentry::ConstrainRotation(
 				Adapter.PitchPivot.RelativeRotation,
 				LocalDirection.Rotation(),
-				ChassisDef.Rotator02Constraint,
+				Adapter.PitchConstraint,
 				DeltaSeconds
 			);
 		}
@@ -137,7 +149,7 @@ class UBSSentriesSystem : UScriptWorldSubsystem
 
 			if (PSUConfigs[Index] == nullptr || PowerStates[Index].SupplyRatio > 0.0f)
 			{
-				SentryAim::Update(Sentries[Index], VisualAdapters[Index], ChassisConfigs[Index], TargetLocation, DeltaSeconds);
+				SentryAim::Update(Sentries[Index], VisualAdapters[Index], TargetLocation, DeltaSeconds);
 			}
 		}
 	}

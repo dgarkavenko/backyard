@@ -4,7 +4,9 @@ class UBSModularComponent : UActorComponent
 {
 	TArray<FBFModuleSlot> Slots;
 	TArray<int> SlotModuleIndices;
+	TArray<int> SlotProviderModuleIndices;
 	TArray<UBFModuleDefinition> InstalledModules;
+	TArray<int> ModuleOccupiedSlotIndices;
 	FGameplayTagContainer Capabilities;
 
 	int RuntimeHandle = -1;
@@ -38,9 +40,16 @@ class UBSModularComponent : UActorComponent
 			return false;
 		}
 
+		bool bIsChassis = Cast<UBSChassisDefinition>(NewModule) != nullptr;
+		bool bHasChassis = HasInstalledChassis();
+		if (bIsChassis)
+		{
+			return !bHasChassis;
+		}
+
 		if (NewModule.Instalation.IsEmpty())
 		{
-			return true;
+			return bHasChassis;
 		}
 
 		for (const FBFModuleSlot& Slot : Slots)
@@ -58,10 +67,57 @@ class UBSModularComponent : UActorComponent
 	{
 		if (!CanAddModule(NewModule))
 		{
+			FString ModuleName = NewModule != nullptr ? NewModule.GetName().ToString() : "<null-module>";
+			SentryDebug::LogAssembly(f"Modular: rejected install '{ModuleName}' owner='{GetOwnerName()}'");
 			return false;
 		}
 
-		AppendModule(NewModule);
+		AppendModule(NewModule, -1);
+		FString ModuleName = NewModule != nullptr ? NewModule.GetName().ToString() : "<null-module>";
+		SentryDebug::LogAssembly(f"Modular: installed '{ModuleName}' owner='{GetOwnerName()}'");
+		NotifyCompositionChanged();
+		return true;
+	}
+
+	bool CanAddModuleToSlot(UBFModuleDefinition NewModule, int SlotIndex) const
+	{
+		if (NewModule == nullptr || SlotIndex < 0 || SlotIndex >= Slots.Num())
+		{
+			return false;
+		}
+
+		if (Slots[SlotIndex].bOccupied)
+		{
+			return false;
+		}
+
+		bool bIsChassis = Cast<UBSChassisDefinition>(NewModule) != nullptr;
+		bool bHasChassis = HasInstalledChassis();
+		if (bIsChassis)
+		{
+			return false;
+		}
+
+		if (NewModule.Instalation.IsEmpty())
+		{
+			return bHasChassis;
+		}
+
+		return NewModule.Instalation.Matches(Slots[SlotIndex].Tags);
+	}
+
+	bool AddModuleToSlot(UBFModuleDefinition NewModule, int SlotIndex)
+	{
+		if (!CanAddModuleToSlot(NewModule, SlotIndex))
+		{
+			FString ModuleName = NewModule != nullptr ? NewModule.GetName().ToString() : "<null-module>";
+			SentryDebug::LogAssembly(f"Modular: rejected slot install '{ModuleName}' owner='{GetOwnerName()}' slot={SlotIndex}");
+			return false;
+		}
+
+		AppendModule(NewModule, SlotIndex);
+		FString ModuleName = NewModule != nullptr ? NewModule.GetName().ToString() : "<null-module>";
+		SentryDebug::LogAssembly(f"Modular: installed '{ModuleName}' owner='{GetOwnerName()}' slot={SlotIndex}");
 		NotifyCompositionChanged();
 		return true;
 	}
@@ -86,7 +142,7 @@ class UBSModularComponent : UActorComponent
 		{
 			if (CanAddModule(Module))
 			{
-				AppendModule(Module);
+				AppendModule(Module, -1);
 			}
 		}
 
@@ -109,29 +165,96 @@ class UBSModularComponent : UActorComponent
 		return InstalledModules[ModuleIndex];
 	}
 
-	private void AppendModule(UBFModuleDefinition NewModule)
+	int GetInstalledModuleIndex(UBFModuleDefinition Module) const
+	{
+		for (int ModuleIndex = 0; ModuleIndex < InstalledModules.Num(); ModuleIndex++)
+		{
+			if (InstalledModules[ModuleIndex] == Module)
+			{
+				return ModuleIndex;
+			}
+		}
+
+		return -1;
+	}
+
+	int GetOccupiedSlotIndexForModuleIndex(int ModuleIndex) const
+	{
+		if (ModuleIndex < 0 || ModuleIndex >= ModuleOccupiedSlotIndices.Num())
+		{
+			return -1;
+		}
+
+		return ModuleOccupiedSlotIndices[ModuleIndex];
+	}
+
+	int GetSlotProviderModuleIndex(int SlotIndex) const
+	{
+		if (SlotIndex < 0 || SlotIndex >= SlotProviderModuleIndices.Num())
+		{
+			return -1;
+		}
+
+		return SlotProviderModuleIndices[SlotIndex];
+	}
+
+	bool HasInstalledChassis() const
+	{
+		for (UBFModuleDefinition Module : InstalledModules)
+		{
+			if (Cast<UBSChassisDefinition>(Module) != nullptr)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private void AppendModule(UBFModuleDefinition NewModule, int PreferredSlotIndex)
 	{
 		int ModuleIndex = InstalledModules.Num();
 		InstalledModules.Add(NewModule);
+		ModuleOccupiedSlotIndices.Add(-1);
 		Capabilities.AppendTags(NewModule.Capabilities);
 
 		if (!NewModule.Instalation.IsEmpty())
 		{
-			for (int SlotIndex = 0; SlotIndex < Slots.Num(); SlotIndex++)
+			if (PreferredSlotIndex >= 0
+				&& PreferredSlotIndex < Slots.Num()
+				&& !Slots[PreferredSlotIndex].bOccupied
+				&& NewModule.Instalation.Matches(Slots[PreferredSlotIndex].Tags))
 			{
-				if (!Slots[SlotIndex].bOccupied && NewModule.Instalation.Matches(Slots[SlotIndex].Tags))
+				Slots[PreferredSlotIndex].bOccupied = true;
+				SlotModuleIndices[PreferredSlotIndex] = ModuleIndex;
+				ModuleOccupiedSlotIndices[ModuleIndex] = PreferredSlotIndex;
+			}
+			else
+			{
+				for (int SlotIndex = 0; SlotIndex < Slots.Num(); SlotIndex++)
 				{
-					Slots[SlotIndex].bOccupied = true;
-					SlotModuleIndices[SlotIndex] = ModuleIndex;
-					break;
+					if (!Slots[SlotIndex].bOccupied && NewModule.Instalation.Matches(Slots[SlotIndex].Tags))
+					{
+						Slots[SlotIndex].bOccupied = true;
+						SlotModuleIndices[SlotIndex] = ModuleIndex;
+						ModuleOccupiedSlotIndices[ModuleIndex] = SlotIndex;
+						break;
+					}
 				}
 			}
+		}
+		else if (PreferredSlotIndex >= 0 && PreferredSlotIndex < Slots.Num() && !Slots[PreferredSlotIndex].bOccupied)
+		{
+			Slots[PreferredSlotIndex].bOccupied = true;
+			SlotModuleIndices[PreferredSlotIndex] = ModuleIndex;
+			ModuleOccupiedSlotIndices[ModuleIndex] = PreferredSlotIndex;
 		}
 
 		for (const FBFModuleSlot& ProvidedSlot : NewModule.ProvidedSlots)
 		{
 			Slots.Add(ProvidedSlot);
 			SlotModuleIndices.Add(-1);
+			SlotProviderModuleIndices.Add(ModuleIndex);
 		}
 	}
 
@@ -139,7 +262,9 @@ class UBSModularComponent : UActorComponent
 	{
 		Slots.Empty();
 		SlotModuleIndices.Empty();
+		SlotProviderModuleIndices.Empty();
 		InstalledModules.Empty();
+		ModuleOccupiedSlotIndices.Empty();
 		Capabilities = FGameplayTagContainer();
 	}
 
@@ -178,65 +303,13 @@ class UBSModularComponent : UActorComponent
 	private void NotifyCompositionChanged()
 	{
 		CompositionVersion++;
+		SentryDebug::LogAssembly(f"Modular: composition changed owner='{GetOwnerName()}' version={CompositionVersion} modules={InstalledModules.Num()} slots={Slots.Num()}");
 		UpdateRuntimeRecord();
 		OnCompositionChanged.Broadcast(this);
 	}
-}
 
-class UBSModularEntitiesSystem : UScriptWorldSubsystem
-{
-	TArray<AActor> Owners;
-	TArray<UBSModularComponent> Components;
-	TArray<FGameplayTagContainer> CapabilitySets;
-	TArray<int> CompositionVersions;
-	TArray<int> FreeList;
-
-	int Register(UBSModularComponent Component)
+	private FString GetOwnerName() const
 	{
-		int Handle = -1;
-
-		if (FreeList.Num() > 0)
-		{
-			Handle = FreeList.Last();
-			FreeList.RemoveAt(FreeList.Num() - 1);
-		}
-		else
-		{
-			Handle = Components.Num();
-			Owners.Add(nullptr);
-			Components.Add(nullptr);
-			CapabilitySets.Add(FGameplayTagContainer());
-			CompositionVersions.Add(0);
-		}
-
-		UpdateRecord(Handle, Component);
-		return Handle;
-	}
-
-	void UpdateRecord(int Handle, UBSModularComponent Component)
-	{
-		if (Handle < 0 || Handle >= Components.Num())
-		{
-			return;
-		}
-
-		Components[Handle] = Component;
-		Owners[Handle] = Component != nullptr ? Cast<AActor>(Component.Owner) : nullptr;
-		CapabilitySets[Handle] = Component != nullptr ? Component.Capabilities : FGameplayTagContainer();
-		CompositionVersions[Handle] = Component != nullptr ? Component.CompositionVersion : 0;
-	}
-
-	void Unregister(int Handle)
-	{
-		if (Handle < 0 || Handle >= Components.Num())
-		{
-			return;
-		}
-
-		Owners[Handle] = nullptr;
-		Components[Handle] = nullptr;
-		CapabilitySets[Handle] = FGameplayTagContainer();
-		CompositionVersions[Handle] = 0;
-		FreeList.Add(Handle);
+		return Owner != nullptr ? Owner.GetName().ToString() : "<null-owner>";
 	}
 }

@@ -1,0 +1,3 @@
+class UBSGenericModule : UBSModuleDefinition
+{
+}

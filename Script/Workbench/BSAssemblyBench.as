@@ -157,7 +157,7 @@ class ABSAssemblyBench : AActor
 
 		Sentry.SetActorLocationAndRotation(
 			SentryMountPoint.GetWorldLocation(),
-			SentryMountPoint.GetWorldRotation()
+			Sentry.ActorRotation.MaskYaw()
 		);
 
 		UPrimitiveComponent RootPrimitive = Cast<UPrimitiveComponent>(Sentry.RootComponent);
