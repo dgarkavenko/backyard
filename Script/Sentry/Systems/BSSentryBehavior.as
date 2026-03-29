@@ -1,62 +1,3 @@
-namespace SentryDebug
-{
-	const FConsoleVariable ShowSockets(f"BF.Sentry.ShowSockets", 0);
-	const FConsoleVariable LogAssemblyCVar(f"BF.Sentry.LogAssembly", 0);
-
-	void LogAssembly(FString Message)
-	{
-		if (LogAssemblyCVar.Int > 0)
-		{
-			Log(Message);
-		}
-	}
-
-	void DrawSockets(ABSSentry Sentry)
-	{
-		if (Sentry == nullptr || Sentry.ModularComponent == nullptr || Sentry.VisualAdapter == nullptr)
-		{
-			return;
-		}
-
-		int SlotCount = Sentry.ModularComponent.Slots.Num();
-		FString BaseMeshName = Sentry.Base != nullptr && Sentry.Base.StaticMesh != nullptr ? Sentry.Base.StaticMesh.GetName().ToString() : "None";
-		FString Header = f"Slots: {SlotCount} Modules: {Sentry.ModularComponent.InstalledModules.Num()} Base: {BaseMeshName}";
-		System::DrawDebugString(Sentry.ActorLocation + FVector(0, 0, 50), Header, nullptr, FLinearColor::White);
-		System::DrawDebugString(Sentry.ActorLocation + FVector(0, 0, 70), f"Yaw: {Sentry.VisualAdapter.YawPivot != nullptr} Pitch: {Sentry.VisualAdapter.PitchPivot != nullptr} Muzzle: {Sentry.VisualAdapter.MuzzleComponent != nullptr}", nullptr, FLinearColor::White);
-
-		for (int SlotIndex = 0; SlotIndex < SlotCount; SlotIndex++)
-		{
-			const FBFModuleSlot& ModuleSlot = Sentry.ModularComponent.Slots[SlotIndex];
-			FLinearColor PointColor = ModuleSlot.bOccupied ? FLinearColor::Yellow : FLinearColor::Green;
-			FString Label = ModuleSlot.Socket.ToString();
-
-			if (ModuleSlot.Socket == NAME_None)
-			{
-				FVector FallbackLocation = Sentry.ActorLocation + FVector(0, 0, 30 + SlotIndex * 15);
-				System::DrawDebugPoint(FallbackLocation, 8.0f, FLinearColor::Red, 0, EDrawDebugSceneDepthPriorityGroup::Foreground);
-				System::DrawDebugString(FallbackLocation, f"[{SlotIndex}] NO SOCKET", nullptr, FLinearColor::Red);
-				continue;
-			}
-
-			USceneComponent SocketOwner = SentryAssembly::FindSocketOwner(Sentry.VisualAdapter, Sentry, ModuleSlot.Socket);
-			if (SocketOwner == nullptr)
-			{
-				USceneComponent DefaultAttachParent = Sentry.VisualAdapter.GetDefaultAttachParent(Sentry);
-				FVector VirtualLocation = DefaultAttachParent != nullptr
-					? DefaultAttachParent.WorldLocation + FVector(0, 0, 10 + SlotIndex * 10)
-					: Sentry.ActorLocation + FVector(0, 0, 10 + SlotIndex * 10);
-				FLinearColor CyanColor = FLinearColor(0.0f, 0.8f, 0.8f);
-				System::DrawDebugPoint(VirtualLocation, 8.0f, CyanColor, 0, EDrawDebugSceneDepthPriorityGroup::Foreground);
-				System::DrawDebugString(VirtualLocation, f"[{SlotIndex}] {Label} (virtual)", nullptr, CyanColor);
-				continue;
-			}
-
-			FVector SocketLocation = SocketOwner.GetSocketLocation(ModuleSlot.Socket);
-			System::DrawDebugPoint(SocketLocation, 12.0f, PointColor, 0, EDrawDebugSceneDepthPriorityGroup::Foreground);
-			System::DrawDebugString(SocketLocation, f"[{SlotIndex}] {Label}", nullptr, PointColor);
-		}
-	}
-}
 
 namespace SentryAim
 {
@@ -67,46 +8,51 @@ namespace SentryAim
 			return;
 		}
 
-		FVector YawPivotWorld = Adapter.YawPivot != nullptr
-			? Adapter.YawPivot.WorldTransform.TransformPosition(Adapter.YawPivotOffset)
-			: FVector::ZeroVector;
-		FVector DirectionToTarget = (TargetLocation - YawPivotWorld).GetSafeNormal();
+		USceneComponent Rotator0 = Adapter.RotatorComponents[0];
+		USceneComponent Rotator1 = Adapter.RotatorComponents[1];
+		FBSSentryConstraint Rotator0Constraint = Adapter.RotatorConstraints.Num() > 0 ? Adapter.RotatorConstraints[0] : FBSSentryConstraint();
+		FBSSentryConstraint Rotator1Constraint = Adapter.RotatorConstraints.Num() > 1 ? Adapter.RotatorConstraints[1] : FBSSentryConstraint();
+		FVector Rotator0Offset = Adapter.RotatorOffsets.Num() > 0 ? Adapter.RotatorOffsets[0] : FVector::ZeroVector;
+		FVector Rotator1Offset = Adapter.RotatorOffsets.Num() > 1 ? Adapter.RotatorOffsets[1] : FVector::ZeroVector;
+
+		FVector Rotator0World = Rotator0.WorldTransform.TransformPosition(Rotator0Offset);
+		FVector DirectionToTarget = (TargetLocation - Rotator0World).GetSafeNormal();
 		FVector LocalDirection = Sentry.Base.WorldTransform.InverseTransformVector(DirectionToTarget);
 		FRotator Constrained = Sentry::ConstrainRotation(
-			Adapter.YawPivot.RelativeRotation,
+			Rotator0.RelativeRotation,
 			LocalDirection.Rotation(),
-			Adapter.YawConstraint,
+			Rotator0Constraint,
 			DeltaSeconds
 		);
-		Adapter.YawPivot.SetRelativeRotation(Constrained);
+		Rotator0.SetRelativeRotation(Constrained);
 
 		if (Adapter.MuzzleComponent != nullptr)
 		{
-			FVector MuzzleWorld = Adapter.PitchPivot.WorldTransform.TransformPosition(Adapter.MuzzleOffset);
+			FVector MuzzleWorld = Rotator1.WorldTransform.TransformPosition(Adapter.MuzzleOffset);
 			DirectionToTarget = (TargetLocation - MuzzleWorld).GetSafeNormal();
-			LocalDirection = Adapter.YawPivot.WorldTransform.InverseTransformVector(DirectionToTarget);
+			LocalDirection = Rotator0.WorldTransform.InverseTransformVector(DirectionToTarget);
 			FRotator DesiredRotation = LocalDirection.Rotation() - Adapter.MuzzleForwardRotation;
 			Constrained = Sentry::ConstrainRotation(
-				Adapter.PitchPivot.RelativeRotation,
+				Rotator1.RelativeRotation,
 				DesiredRotation,
-				Adapter.PitchConstraint,
+				Rotator1Constraint,
 				DeltaSeconds
 			);
 		}
 		else
 		{
-			FVector PitchPivotWorld = Adapter.YawPivot.WorldTransform.TransformPosition(Adapter.PitchPivotOffset);
-			DirectionToTarget = (TargetLocation - PitchPivotWorld).GetSafeNormal();
-			LocalDirection = Adapter.YawPivot.WorldTransform.InverseTransformVector(DirectionToTarget);
+			FVector Rotator1World = Rotator0.WorldTransform.TransformPosition(Rotator1Offset);
+			DirectionToTarget = (TargetLocation - Rotator1World).GetSafeNormal();
+			LocalDirection = Rotator0.WorldTransform.InverseTransformVector(DirectionToTarget);
 			Constrained = Sentry::ConstrainRotation(
-				Adapter.PitchPivot.RelativeRotation,
+				Rotator1.RelativeRotation,
 				LocalDirection.Rotation(),
-				Adapter.PitchConstraint,
+				Rotator1Constraint,
 				DeltaSeconds
 			);
 		}
 
-		Adapter.PitchPivot.SetRelativeRotation(Constrained);
+		Rotator1.SetRelativeRotation(Constrained);
 	}
 }
 

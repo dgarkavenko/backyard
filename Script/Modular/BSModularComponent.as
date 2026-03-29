@@ -40,16 +40,9 @@ class UBSModularComponent : UActorComponent
 			return false;
 		}
 
-		bool bIsChassis = Cast<UBSChassisDefinition>(NewModule) != nullptr;
-		bool bHasChassis = HasInstalledChassis();
-		if (bIsChassis)
+		if (NewModule.Instalation.IsEmpty() && InstalledModules.IsEmpty())
 		{
-			return !bHasChassis;
-		}
-
-		if (NewModule.Instalation.IsEmpty())
-		{
-			return bHasChassis;
+			return true;
 		}
 
 		for (const FBFModuleSlot& Slot : Slots)
@@ -68,13 +61,13 @@ class UBSModularComponent : UActorComponent
 		if (!CanAddModule(NewModule))
 		{
 			FString ModuleName = NewModule != nullptr ? NewModule.GetName().ToString() : "<null-module>";
-			SentryDebug::LogAssembly(f"Modular: rejected install '{ModuleName}' owner='{GetOwnerName()}'");
+			SentryDebugF::LogAssembly(f"Modular: rejected install '{ModuleName}' owner='{GetOwnerName()}'");
 			return false;
 		}
 
 		AppendModule(NewModule, -1);
 		FString ModuleName = NewModule != nullptr ? NewModule.GetName().ToString() : "<null-module>";
-		SentryDebug::LogAssembly(f"Modular: installed '{ModuleName}' owner='{GetOwnerName()}'");
+		SentryDebugF::LogAssembly(f"Modular: installed '{ModuleName}' owner='{GetOwnerName()}'");
 		NotifyCompositionChanged();
 		return true;
 	}
@@ -91,16 +84,9 @@ class UBSModularComponent : UActorComponent
 			return false;
 		}
 
-		bool bIsChassis = Cast<UBSChassisDefinition>(NewModule) != nullptr;
-		bool bHasChassis = HasInstalledChassis();
-		if (bIsChassis)
+		if (NewModule.Instalation.IsEmpty() && InstalledModules.IsEmpty())
 		{
-			return false;
-		}
-
-		if (NewModule.Instalation.IsEmpty())
-		{
-			return bHasChassis;
+			return true;
 		}
 
 		return NewModule.Instalation.Matches(Slots[SlotIndex].Tags);
@@ -111,13 +97,13 @@ class UBSModularComponent : UActorComponent
 		if (!CanAddModuleToSlot(NewModule, SlotIndex))
 		{
 			FString ModuleName = NewModule != nullptr ? NewModule.GetName().ToString() : "<null-module>";
-			SentryDebug::LogAssembly(f"Modular: rejected slot install '{ModuleName}' owner='{GetOwnerName()}' slot={SlotIndex}");
+			SentryDebugF::LogAssembly(f"Modular: rejected slot install '{ModuleName}' owner='{GetOwnerName()}' slot={SlotIndex}");
 			return false;
 		}
 
 		AppendModule(NewModule, SlotIndex);
 		FString ModuleName = NewModule != nullptr ? NewModule.GetName().ToString() : "<null-module>";
-		SentryDebug::LogAssembly(f"Modular: installed '{ModuleName}' owner='{GetOwnerName()}' slot={SlotIndex}");
+		SentryDebugF::LogAssembly(f"Modular: installed '{ModuleName}' owner='{GetOwnerName()}' slot={SlotIndex}");
 		NotifyCompositionChanged();
 		return true;
 	}
@@ -196,19 +182,6 @@ class UBSModularComponent : UActorComponent
 		}
 
 		return SlotProviderModuleIndices[SlotIndex];
-	}
-
-	bool HasInstalledChassis() const
-	{
-		for (UBFModuleDefinition Module : InstalledModules)
-		{
-			if (Cast<UBSChassisDefinition>(Module) != nullptr)
-			{
-				return true;
-			}
-		}
-
-		return false;
 	}
 
 	private void AppendModule(UBFModuleDefinition NewModule, int PreferredSlotIndex)
@@ -303,7 +276,7 @@ class UBSModularComponent : UActorComponent
 	private void NotifyCompositionChanged()
 	{
 		CompositionVersion++;
-		SentryDebug::LogAssembly(f"Modular: composition changed owner='{GetOwnerName()}' version={CompositionVersion} modules={InstalledModules.Num()} slots={Slots.Num()}");
+		SentryDebugF::LogAssembly(f"Modular: composition changed owner='{GetOwnerName()}' version={CompositionVersion} modules={InstalledModules.Num()} slots={Slots.Num()}");
 		UpdateRuntimeRecord();
 		OnCompositionChanged.Broadcast(this);
 	}

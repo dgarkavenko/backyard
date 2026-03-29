@@ -42,9 +42,9 @@ class UBSAssemblyScreen : UBSMMScreen
 		}
 
 		ABSSentry Sentry = GetSentry();
-		if (Sentry != nullptr && SentryDebug::ShowSockets.Int > 0)
+		if (Sentry != nullptr && SentryDebugF::ShowSockets.Int > 0)
 		{
-			SentryDebug::DrawSockets(Sentry);
+			SentryDebugF::DrawSockets(Sentry);
 		}
 
 		mm::BeginDraw(MMWidget);
@@ -106,6 +106,18 @@ class UBSAssemblyScreen : UBSMMScreen
 		return Sentry.ModularComponent;
 	}
 
+	FString GetLeafs(FGameplayTagContainer Container)
+	{
+		TArray<FString> Leafs;
+
+		for (FGameplayTag Tag : Container.GameplayTags)
+		{			
+			Leafs.Add(String::ParseIntoArray(Tag.ToString(), ".", true).Last());
+		}
+
+		return FString::Join(Leafs, ",");
+	}
+
 	private void DrawSlotsSection()
 	{
 		mm::Text("SLOTS", 20, HeaderColor);
@@ -128,12 +140,13 @@ class UBSAssemblyScreen : UBSMMScreen
 		if (SelectedSlotIndex >= 0 && SelectedSlotIndex < ModularComponent.Slots.Num())
 		{
 			const FBFModuleSlot& SelectedSlot = ModularComponent.Slots[SelectedSlotIndex];
-			FString SelectedLabel = SelectedSlot.Socket.ToString();
+			FString SelectedLabel = GetLeafs(SelectedSlot.Tags);
+
 			if (SelectedLabel.IsEmpty())
 			{
 				SelectedLabel = f"Slot {SelectedSlotIndex}";
 			}
-			mm::Text(f"Selected: [{SelectedSlotIndex}] {SelectedLabel}", 14, FLinearColor::White);
+
 			mm::Spacer(5.0f);
 		}
 
@@ -141,7 +154,8 @@ class UBSAssemblyScreen : UBSMMScreen
 		{
 			const FBFModuleSlot& CurrentSlot = ModularComponent.Slots[Index];
 
-			FString SlotLabel = CurrentSlot.Socket.ToString();
+			FString SlotLabel = f"{GetLeafs(CurrentSlot.Tags)} [{CurrentSlot.Socket.ToString()}]";
+
 			if (SlotLabel.IsEmpty())
 			{
 				SlotLabel = f"Slot {Index}";
@@ -152,7 +166,7 @@ class UBSAssemblyScreen : UBSMMScreen
 
 			if (InstalledModule != nullptr)
 			{
-				SlotLabel = f"{SlotLabel}: {InstalledModule.GetName()}";
+				SlotLabel = f"{InstalledModule.GetName()}";
 			}
 
 			auto ButtonState = mm::Button(SlotLabel);
@@ -174,18 +188,18 @@ class UBSAssemblyScreen : UBSMMScreen
 			{
 				if (bIsSelected)
 				{
-					SentryDebug::LogAssembly(f"Assembly UI: deselected slot {Index}");
+					SentryDebugF::LogAssembly(f"Assembly UI: deselected slot {Index}");
 					SelectedSlotIndex = -1;
 				}
 				else if (CurrentSlot.bOccupied && InstalledModule != nullptr)
 				{
-					SentryDebug::LogAssembly(f"Assembly UI: removing occupied slot {Index} module='{InstalledModule.GetName()}'");
+					SentryDebugF::LogAssembly(f"Assembly UI: removing occupied slot {Index} module='{InstalledModule.GetName()}'");
 					RemoveModuleAndChildren(ModularComponent, InstalledModule);
 					SelectedSlotIndex = -1;
 				}
 				else
 				{
-					SentryDebug::LogAssembly(f"Assembly UI: selected slot {Index} socket='{CurrentSlot.Socket}'");
+					SentryDebugF::LogAssembly(f"Assembly UI: selected slot {Index} socket='{CurrentSlot.Socket}'");
 					SelectedSlotIndex = Index;
 				}
 			}
@@ -251,7 +265,7 @@ class UBSAssemblyScreen : UBSMMScreen
 			{
 				if (bAlreadyInstalled)
 				{
-					SentryDebug::LogAssembly(f"Assembly UI: removing '{Module.GetName()}'");
+					SentryDebugF::LogAssembly(f"Assembly UI: removing '{Module.GetName()}'");
 					RemoveModuleAndChildren(ModularComponent, Module);
 					SelectedSlotIndex = -1;
 				}
@@ -263,7 +277,7 @@ class UBSAssemblyScreen : UBSMMScreen
 					{
 						InstallSocket = ModularComponent.Slots[InstallSlotIndex].Socket.ToString();
 					}
-					SentryDebug::LogAssembly(f"Assembly UI: installing '{Module.GetName()}' selectedSlot={InstallSlotIndex} socket='{InstallSocket}'");
+					SentryDebugF::LogAssembly(f"Assembly UI: installing '{Module.GetName()}' selectedSlot={InstallSlotIndex} socket='{InstallSocket}'");
 					if (InstallSlotIndex >= 0)
 					{
 						ModularComponent.AddModuleToSlot(Module, InstallSlotIndex);
@@ -305,7 +319,7 @@ class UBSAssemblyScreen : UBSMMScreen
 
 		if (bInvalidSelection)
 		{
-			SentryDebug::LogAssembly(f"Assembly UI: cleared selected slot {SelectedSlotIndex} after composition version {ObservedCompositionVersion}");
+			SentryDebugF::LogAssembly(f"Assembly UI: cleared selected slot {SelectedSlotIndex} after composition version {ObservedCompositionVersion}");
 			SelectedSlotIndex = -1;
 		}
 	}
