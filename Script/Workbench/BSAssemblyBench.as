@@ -173,6 +173,11 @@ class ABSAssemblyBench : AActor
 		{
 			Sentry.Material = SentryMaterial;
 		}
+
+		if (Sentry.VisualAdapter != nullptr)
+		{
+			Sentry.VisualAdapter.RebuildFromCurrentModules();
+		}
 	}
 
 	ABSSentry UnmountSentry()
@@ -211,20 +216,12 @@ class ABSAssemblyBench : AActor
 
 	void ApplyModules(const TArray<UBFModuleDefinition>& Modules)
 	{
-		if (Sentry == nullptr)
+		if (Sentry == nullptr || Sentry.ModularComponent == nullptr)
 		{
 			return;
 		}
 
-		Sentry.ClearModules();
-
-		for (UBFModuleDefinition Module : Modules)
-		{
-			if (Module != nullptr && Sentry.CanAddModule(Module))
-			{
-				Sentry.AddModule(Module);
-			}
-		}
+		Sentry.ModularComponent.SetModules(Modules);
 	}
 
 	// ── Snap Zone ──

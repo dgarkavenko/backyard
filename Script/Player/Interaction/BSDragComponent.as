@@ -244,9 +244,7 @@ class UBSDragComponent : UActorComponent
 			float Sqrt = Math::Sqrt(RootPrimitive.Mass);
 			float Sqrt2 = 1 / Math::Sqrt(Sqrt);
 
-			
-			Log(f"{RootPrimitive.Mass}");
-
+			// TODO: Figure out how to automate mass on ABSSentry
 			RootPrimitive.SetPhysicsLinearVelocity(RootPrimitive.GetPhysicsLinearVelocity() * Sqrt2);
 			auto AngularVelocity = RootPrimitive.GetPhysicsAngularVelocityInRadians();
 			RootPrimitive.SetPhysicsAngularVelocityInRadians(AngularVelocity * Sqrt2);

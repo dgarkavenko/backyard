@@ -90,31 +90,41 @@ class UBSAssemblyScreen : UBSMMScreen
 		{
 			return nullptr;
 		}
+
 		return OwningWorkbench.Sentry;
 	}
 
-	// ── Slots ──
+	private UBSModularComponent GetModularComponent() const
+	{
+		ABSSentry Sentry = GetSentry();
+		if (Sentry == nullptr)
+		{
+			return nullptr;
+		}
+
+		return Sentry.ModularComponent;
+	}
 
 	private void DrawSlotsSection()
 	{
 		mm::Text("SLOTS", 20, HeaderColor);
 		mm::Spacer(5.0f);
 
-		ABSSentry Sentry = GetSentry();
-		if (Sentry == nullptr)
+		UBSModularComponent ModularComponent = GetModularComponent();
+		if (ModularComponent == nullptr)
 		{
 			return;
 		}
 
-		if (Sentry.Slots.Num() == 0)
+		if (ModularComponent.Slots.Num() == 0)
 		{
 			mm::Text("No slots available", 14, DisabledColor);
 			return;
 		}
 
-		for (int Index = 0; Index < Sentry.Slots.Num(); Index++)
+		for (int Index = 0; Index < ModularComponent.Slots.Num(); Index++)
 		{
-			const FBFModuleSlot& CurrentSlot = Sentry.Slots[Index];
+			const FBFModuleSlot& CurrentSlot = ModularComponent.Slots[Index];
 
 			FString SlotLabel = CurrentSlot.Socket.ToString();
 			if (SlotLabel.IsEmpty())
@@ -122,7 +132,7 @@ class UBSAssemblyScreen : UBSMMScreen
 				SlotLabel = f"Slot {Index}";
 			}
 
-			UBFModuleDefinition InstalledModule = FindModuleInSlot(Sentry, Index);
+			UBFModuleDefinition InstalledModule = ModularComponent.GetModuleForSlot(Index);
 			bool bIsSelected = (SelectedSlotIndex == Index);
 
 			if (InstalledModule != nullptr)
@@ -153,7 +163,7 @@ class UBSAssemblyScreen : UBSMMScreen
 				}
 				else if (CurrentSlot.bOccupied && InstalledModule != nullptr)
 				{
-					RemoveModuleAndChildren(Sentry, InstalledModule);
+					RemoveModuleAndChildren(ModularComponent, InstalledModule);
 					SelectedSlotIndex = -1;
 				}
 				else
@@ -164,15 +174,13 @@ class UBSAssemblyScreen : UBSMMScreen
 		}
 	}
 
-	// ── Modules ──
-
 	private void DrawModulesSection()
 	{
 		mm::Text("MODULES", 20, HeaderColor);
 		mm::Spacer(5.0f);
 
-		ABSSentry Sentry = GetSentry();
-		if (Sentry == nullptr)
+		UBSModularComponent ModularComponent = GetModularComponent();
+		if (ModularComponent == nullptr)
 		{
 			return;
 		}
@@ -187,19 +195,18 @@ class UBSAssemblyScreen : UBSMMScreen
 				continue;
 			}
 
-			bool bAlreadyInstalled = Sentry.InstalledModules.Contains(Module);
+			bool bAlreadyInstalled = ModularComponent.InstalledModules.Contains(Module);
 			bool bFitsSelectedSlot = false;
 
-			if (SelectedSlotIndex >= 0 && SelectedSlotIndex < Sentry.Slots.Num())
+			if (SelectedSlotIndex >= 0 && SelectedSlotIndex < ModularComponent.Slots.Num())
 			{
-				const FBFModuleSlot& SelectedSlot = Sentry.Slots[SelectedSlotIndex];
+				const FBFModuleSlot& SelectedSlot = ModularComponent.Slots[SelectedSlotIndex];
 				if (!SelectedSlot.bOccupied && !Module.Instalation.IsEmpty())
 				{
 					bFitsSelectedSlot = Module.Instalation.Matches(SelectedSlot.Tags);
 				}
 			}
 
-			// Filter: when slot selected, only show fitting modules
 			if (SelectedSlotIndex >= 0 && !bFitsSelectedSlot && !bAlreadyInstalled)
 			{
 				continue;
@@ -223,42 +230,23 @@ class UBSAssemblyScreen : UBSMMScreen
 			{
 				if (bAlreadyInstalled)
 				{
-					RemoveModuleAndChildren(Sentry, Module);
+					RemoveModuleAndChildren(ModularComponent, Module);
 					SelectedSlotIndex = -1;
 				}
 				else if (bCanInstall)
 				{
-					Sentry.AddModule(Module);
+					ModularComponent.AddModule(Module);
 					SelectedSlotIndex = -1;
 				}
 			}
 		}
 	}
 
-	// ── Helpers ──
-
-	private UBFModuleDefinition FindModuleInSlot(ABSSentry Sentry, int SlotIndex) const
-	{
-		if (SlotIndex < 0 || SlotIndex >= Sentry.SlotModuleIndices.Num())
-		{
-			return nullptr;
-		}
-
-		int ModuleIndex = Sentry.SlotModuleIndices[SlotIndex];
-		if (ModuleIndex < 0 || ModuleIndex >= Sentry.InstalledModules.Num())
-		{
-			return nullptr;
-		}
-
-		return Sentry.InstalledModules[ModuleIndex];
-	}
-
-	private void RemoveModuleAndChildren(ABSSentry Sentry, UBFModuleDefinition Module)
+	private void RemoveModuleAndChildren(UBSModularComponent ModularComponent, UBFModuleDefinition Module)
 	{
 		TArray<UBFModuleDefinition> ToRemove;
 		ToRemove.Add(Module);
 
-		// Recursive: keep expanding until no new modules found
 		int SearchIndex = 0;
 		while (SearchIndex < ToRemove.Num())
 		{
@@ -267,7 +255,7 @@ class UBSAssemblyScreen : UBSMMScreen
 
 			for (const FBFModuleSlot& ProvidedSlot : Current.ProvidedSlots)
 			{
-				for (UBFModuleDefinition Installed : Sentry.InstalledModules)
+				for (UBFModuleDefinition Installed : ModularComponent.InstalledModules)
 				{
 					if (ToRemove.Contains(Installed))
 					{
@@ -282,7 +270,7 @@ class UBSAssemblyScreen : UBSMMScreen
 		}
 
 		TArray<UBFModuleDefinition> Remaining;
-		for (UBFModuleDefinition Installed : Sentry.InstalledModules)
+		for (UBFModuleDefinition Installed : ModularComponent.InstalledModules)
 		{
 			if (!ToRemove.Contains(Installed))
 			{
