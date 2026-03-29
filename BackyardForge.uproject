@@ -1,6 +1,6 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "{CDA83A63-4999-9786-3CC3-6CA68D27C361}",
+	"EngineAssociation": "{56A105CA-4276-DF60-FA14-12974B7EC756}",
 	"Category": "",
 	"Description": "",
 	"Modules": [
@@ -13,6 +13,11 @@
 				"AIModule",
 				"UMG"
 			]
+		},
+		{
+			"Name": "BackyardForgeEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
 		}
 	],
 	"Plugins": [

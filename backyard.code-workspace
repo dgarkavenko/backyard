@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "Script"
+		},
+		{
+			"path": "Plugins/ForgeryUI/Script"
+		},
+		{
+			"path": "Config"
+		}
+	],
+	"settings": {}
+}
