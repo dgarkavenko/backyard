@@ -13,12 +13,6 @@ class ABSAssemblyBench : AActor
 	UBSInteractionRegistry InteractionRegistry;
 
 	UPROPERTY(EditAnywhere, Category = "Workbench")
-	TArray<UBSChassisConfiguration> AvailableChassis;
-
-	UPROPERTY(EditAnywhere, Category = "Workbench")
-	TArray<UBSSentryLoadout> AvailableLoadouts;
-
-	UPROPERTY(EditAnywhere, Category = "Workbench")
 	TSubclassOf<ABSSentry> SentryClass;
 
 	UPROPERTY(EditAnywhere, Category = "Workbench")
@@ -32,6 +26,16 @@ class ABSAssemblyBench : AActor
 
 	UPROPERTY(EditAnywhere, Category = "Workbench|Snap", meta = (ClampMin = "10", ClampMax = "300", Units = "cm"))
 	float SnapZoneRadius = 75.0f;
+
+	TArray<UBFModuleDefinition> GetAvailableModules() const
+	{
+		UBSModuleTaxonomy Taxonomy = UBSModuleTaxonomy::Get();
+		if (Taxonomy != nullptr)
+		{
+			return Taxonomy.GetAllModules();
+		}
+		return TArray<UBFModuleDefinition>();
+	}
 
 	ABSSentry Sentry;
 	ABSSentry PendingSentry;
@@ -169,13 +173,6 @@ class ABSAssemblyBench : AActor
 		{
 			Sentry.Material = SentryMaterial;
 		}
-
-		if (Sentry.Configuration == nullptr)
-		{
-			Sentry.Configuration = Cast<UBSSentryConfiguration>(NewObject(Sentry, UBSSentryConfiguration));
-		}
-
-		Sentry.ApplyConfiguration();
 	}
 
 	ABSSentry UnmountSentry()
@@ -212,16 +209,22 @@ class ABSAssemblyBench : AActor
 		MountSentry(NewSentry);
 	}
 
-	void UpdateSentryConfiguration(UBSChassisConfiguration Chassis, UBSSentryLoadout Loadout)
+	void ApplyModules(const TArray<UBFModuleDefinition>& Modules)
 	{
-		if (Sentry == nullptr || Sentry.Configuration == nullptr)
+		if (Sentry == nullptr)
 		{
 			return;
 		}
 
-		Sentry.Configuration.Chassis = Chassis;
-		Sentry.Configuration.Loadout = Loadout;
-		Sentry.ApplyConfiguration();
+		Sentry.ClearModules();
+
+		for (UBFModuleDefinition Module : Modules)
+		{
+			if (Module != nullptr && Sentry.CanAddModule(Module))
+			{
+				Sentry.AddModule(Module);
+			}
+		}
 	}
 
 	// ── Snap Zone ──

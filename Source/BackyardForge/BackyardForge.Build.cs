@@ -41,7 +41,8 @@ public class BackyardForge : ModuleRules
 			"BackyardForge/Variant_Shooter",
 			"BackyardForge/Variant_Shooter/AI",
 			"BackyardForge/Variant_Shooter/UI",
-			"BackyardForge/Variant_Shooter/Weapons"
+			"BackyardForge/Variant_Shooter/Weapons",
+			"BackyardForge/Sentry"
 		});
 
 		// Uncomment if you are using Slate UI

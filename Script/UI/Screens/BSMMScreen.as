@@ -8,12 +8,12 @@ class UBSMMScreen : UFUActivatableWidget
     UFUNCTION(BlueprintOverride)
     void Tick(FGeometry MyGeometry, float InDeltaTime)
     {
-        mm::BeginDraw(MMWidget);
+        // mm::BeginDraw(MMWidget);
 				
-		mm::HAlign_Center();
-		mm::Padding(5);
-		mm::WithinBorder(PanelColor, 5);
-            mm::Text("UBSUmmScreen", 24, FLinearColor::White);
-        mm::EndDraw();
+		// mm::HAlign_Center();
+		// mm::Padding(5);
+		// mm::WithinBorder(PanelColor, 5);
+        //     mm::Text("UBSUmmScreen", 24, FLinearColor::White);
+        // mm::EndDraw();
     }
 }

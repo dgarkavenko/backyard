@@ -240,8 +240,18 @@ class UBSDragComponent : UActorComponent
 		if (RootPrimitive != nullptr)
 		{
 			RootPrimitive.SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Block);
-		}
+			
+			float Sqrt = Math::Sqrt(RootPrimitive.Mass);
+			float Sqrt2 = 1 / Math::Sqrt(Sqrt);
 
+			
+			Log(f"{RootPrimitive.Mass}");
+
+			RootPrimitive.SetPhysicsLinearVelocity(RootPrimitive.GetPhysicsLinearVelocity() * Sqrt2);
+			auto AngularVelocity = RootPrimitive.GetPhysicsAngularVelocityInRadians();
+			RootPrimitive.SetPhysicsAngularVelocityInRadians(AngularVelocity * Sqrt2);
+		}
+		
 		DraggedActor = nullptr;
 
 		ABSCharacter Character = Cast<ABSCharacter>(Owner);
@@ -296,9 +306,14 @@ class UBSDragComponent : UActorComponent
 	{
 		FQuat CameraQuat = FQuat::Identity;
 
-		if (ParentMode > EBSDragParent::None)
+		if (ParentMode == EBSDragParent::Full)
 		{
 			CameraQuat = Camera.WorldRotation.Quaternion() * CameraRotationOnGrab.Inverse();
+		}
+		else if (ParentMode == EBSDragParent::Yaw)
+		{
+			float dYaw = -CameraRotationOnGrab.Rotator().Yaw + Camera.WorldRotation.Yaw;
+			CameraQuat = FQuat::MakeFromRotator(FRotator(0, dYaw, 0));
 		}
 
 		FQuat ManualYaw = FQuat(FVector::UpVector, DragYawOffset);

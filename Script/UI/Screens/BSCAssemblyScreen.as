@@ -3,12 +3,13 @@ class UBSAssemblyScreen : UBSMMScreen
 	ABSAssemblyBench OwningWorkbench;
 	default PanelColor = FLinearColor(0.02f, 0.02f, 0.02f, 0.85f);
 
-	int SelectedChassisIndex = -1;
-	int SelectedLoadoutIndex = -1;
-	bool bConfigurationDirty = false;
 	bool bInitialized = false;
+	int SelectedSlotIndex = -1;
 
 	const FLinearColor SelectedColor = FLinearColor(0.15f, 0.4f, 0.15f);
+	const FLinearColor OccupiedColor = FLinearColor(0.4f, 0.3f, 0.1f);
+	const FLinearColor DisabledColor = FLinearColor(0.3f, 0.15f, 0.15f);
+	const FLinearColor EmptySlotColor = FLinearColor(0.1f, 0.2f, 0.3f);
 	const FLinearColor HeaderColor = FLinearColor(0.6f, 0.6f, 0.6f);
 
 	UFUNCTION(BlueprintOverride)
@@ -23,6 +24,8 @@ class UBSAssemblyScreen : UBSMMScreen
 	UFUNCTION(BlueprintOverride)
 	void Tick(FGeometry MyGeometry, float InDeltaTime)
 	{
+		Super::Tick(MyGeometry, InDeltaTime);
+
 		if (OwningWorkbench == nullptr)
 		{
 			return;
@@ -31,16 +34,16 @@ class UBSAssemblyScreen : UBSMMScreen
 		if (!bInitialized)
 		{
 			bInitialized = true;
-			if (OwningWorkbench.HasSentry())
+			if (!OwningWorkbench.HasSentry())
 			{
-				InitializeFromSentry();
+				OwningWorkbench.CraftNewSentry();
 			}
 		}
 
-		if (bConfigurationDirty)
+		ABSSentry Sentry = GetSentry();
+		if (Sentry != nullptr && SentryDebug::ShowSockets.Int > 0)
 		{
-			bConfigurationDirty = false;
-			ApplyConfiguration();
+			SentryDebug::DrawSockets(Sentry);
 		}
 
 		mm::BeginDraw(MMWidget);
@@ -53,26 +56,14 @@ class UBSAssemblyScreen : UBSMMScreen
 			mm::Padding(20.0f);
 			mm::BeginVerticalBox();
 
-				mm::Text("SENTRY WORKBENCH", 28, FLinearColor::White, false, true);
+				mm::Text("SENTRY ASSEMBLY", 28, FLinearColor::White, false, true);
 				mm::Spacer(15.0f);
 
-				if (!OwningWorkbench.HasSentry())
+				if (OwningWorkbench.HasSentry())
 				{
-					if (mm::Button("CRAFT NEW"))
-					{
-						OwningWorkbench.CraftNewSentry();
-						InitializeFromSentry();
-					}
-				}
-				else
-				{
-					DrawChassisSection();
-
-					if (SelectedChassisIndex >= 0)
-					{
-						mm::Spacer(10.0f);
-						DrawLoadoutSection();
-					}
+					DrawSlotsSection();
+					mm::Spacer(15.0f);
+					DrawModulesSection();
 				}
 
 				mm::Spacer(10.0f);
@@ -93,142 +84,212 @@ class UBSAssemblyScreen : UBSMMScreen
 		mm::EndDraw();
 	}
 
-	private void InitializeFromSentry()
-	{
-		SelectedChassisIndex = -1;
-		SelectedLoadoutIndex = -1;
-
-		if (OwningWorkbench == nullptr || !OwningWorkbench.HasSentry())
-		{
-			return;
-		}
-
-		ABSSentry Sentry = OwningWorkbench.Sentry;
-		if (Sentry.Configuration == nullptr)
-		{
-			return;
-		}
-
-		UBSChassisConfiguration CurrentChassis = Sentry.Configuration.Chassis;
-		if (CurrentChassis != nullptr)
-		{
-			for (int Index = 0; Index < OwningWorkbench.AvailableChassis.Num(); Index++)
-			{
-				if (OwningWorkbench.AvailableChassis[Index] == CurrentChassis)
-				{
-					SelectedChassisIndex = Index;
-					break;
-				}
-			}
-		}
-
-		UBSSentryLoadout CurrentLoadout = Sentry.Configuration.Loadout;
-		if (CurrentLoadout != nullptr)
-		{
-			for (int Index = 0; Index < OwningWorkbench.AvailableLoadouts.Num(); Index++)
-			{
-				if (OwningWorkbench.AvailableLoadouts[Index] == CurrentLoadout)
-				{
-					SelectedLoadoutIndex = Index;
-					break;
-				}
-			}
-		}
-	}
-
-	private void DrawChassisSection()
-	{
-		mm::Text("CHASSIS", 20, HeaderColor);
-		mm::Spacer(5.0f);
-
-		auto NoneButton = mm::Button("None");
-		if (SelectedChassisIndex < 0)
-		{
-			NoneButton.SetButtonStyleColor(SelectedColor);
-		}
-		if (NoneButton)
-		{
-			SelectedChassisIndex = -1;
-			bConfigurationDirty = true;
-		}
-
-		for (int Index = 0; Index < OwningWorkbench.AvailableChassis.Num(); Index++)
-		{
-			UBSChassisConfiguration Chassis = OwningWorkbench.AvailableChassis[Index];
-			if (Chassis == nullptr)
-			{
-				continue;
-			}
-
-			auto ButtonState = mm::Button(Chassis.GetName().ToString());
-			if (Index == SelectedChassisIndex)
-			{
-				ButtonState.SetButtonStyleColor(SelectedColor);
-			}
-			if (ButtonState)
-			{
-				SelectedChassisIndex = Index;
-				bConfigurationDirty = true;
-			}
-		}
-	}
-
-	private void DrawLoadoutSection()
-	{
-		mm::Text("LOADOUT", 20, HeaderColor);
-		mm::Spacer(5.0f);
-
-		auto NoneButton = mm::Button("None");
-		if (SelectedLoadoutIndex < 0)
-		{
-			NoneButton.SetButtonStyleColor(SelectedColor);
-		}
-		if (NoneButton)
-		{
-			SelectedLoadoutIndex = -1;
-			bConfigurationDirty = true;
-		}
-
-		for (int Index = 0; Index < OwningWorkbench.AvailableLoadouts.Num(); Index++)
-		{
-			UBSSentryLoadout Loadout = OwningWorkbench.AvailableLoadouts[Index];
-			if (Loadout == nullptr)
-			{
-				continue;
-			}
-
-			auto ButtonState = mm::Button(Loadout.GetName().ToString());
-			if (Index == SelectedLoadoutIndex)
-			{
-				ButtonState.SetButtonStyleColor(SelectedColor);
-			}
-			if (ButtonState)
-			{
-				SelectedLoadoutIndex = Index;
-				bConfigurationDirty = true;
-			}
-		}
-	}
-
-	private void ApplyConfiguration()
+	private ABSSentry GetSentry() const
 	{
 		if (OwningWorkbench == nullptr)
 		{
+			return nullptr;
+		}
+		return OwningWorkbench.Sentry;
+	}
+
+	// ── Slots ──
+
+	private void DrawSlotsSection()
+	{
+		mm::Text("SLOTS", 20, HeaderColor);
+		mm::Spacer(5.0f);
+
+		ABSSentry Sentry = GetSentry();
+		if (Sentry == nullptr)
+		{
 			return;
 		}
 
-		UBSChassisConfiguration Chassis = nullptr;
-		if (SelectedChassisIndex >= 0 && SelectedChassisIndex < OwningWorkbench.AvailableChassis.Num())
+		if (Sentry.Slots.Num() == 0)
 		{
-			Chassis = OwningWorkbench.AvailableChassis[SelectedChassisIndex];
+			mm::Text("No slots available", 14, DisabledColor);
+			return;
 		}
 
-		UBSSentryLoadout Loadout = nullptr;
-		if (SelectedLoadoutIndex >= 0 && SelectedLoadoutIndex < OwningWorkbench.AvailableLoadouts.Num())
+		for (int Index = 0; Index < Sentry.Slots.Num(); Index++)
 		{
-			Loadout = OwningWorkbench.AvailableLoadouts[SelectedLoadoutIndex];
+			const FBFModuleSlot& CurrentSlot = Sentry.Slots[Index];
+
+			FString SlotLabel = CurrentSlot.Socket.ToString();
+			if (SlotLabel.IsEmpty())
+			{
+				SlotLabel = f"Slot {Index}";
+			}
+
+			UBFModuleDefinition InstalledModule = FindModuleInSlot(Sentry, Index);
+			bool bIsSelected = (SelectedSlotIndex == Index);
+
+			if (InstalledModule != nullptr)
+			{
+				SlotLabel = f"{SlotLabel}: {InstalledModule.GetName()}";
+			}
+
+			auto ButtonState = mm::Button(SlotLabel);
+
+			if (bIsSelected)
+			{
+				ButtonState.SetButtonStyleColor(SelectedColor);
+			}
+			else if (CurrentSlot.bOccupied)
+			{
+				ButtonState.SetButtonStyleColor(OccupiedColor);
+			}
+			else
+			{
+				ButtonState.SetButtonStyleColor(EmptySlotColor);
+			}
+
+			if (ButtonState)
+			{
+				if (bIsSelected)
+				{
+					SelectedSlotIndex = -1;
+				}
+				else if (CurrentSlot.bOccupied && InstalledModule != nullptr)
+				{
+					RemoveModuleAndChildren(Sentry, InstalledModule);
+					SelectedSlotIndex = -1;
+				}
+				else
+				{
+					SelectedSlotIndex = Index;
+				}
+			}
+		}
+	}
+
+	// ── Modules ──
+
+	private void DrawModulesSection()
+	{
+		mm::Text("MODULES", 20, HeaderColor);
+		mm::Spacer(5.0f);
+
+		ABSSentry Sentry = GetSentry();
+		if (Sentry == nullptr)
+		{
+			return;
 		}
 
-		OwningWorkbench.UpdateSentryConfiguration(Chassis, Loadout);
+		TArray<UBFModuleDefinition> AllModules = OwningWorkbench.GetAvailableModules();
+
+		for (int Index = 0; Index < AllModules.Num(); Index++)
+		{
+			UBFModuleDefinition Module = AllModules[Index];
+			if (Module == nullptr)
+			{
+				continue;
+			}
+
+			bool bAlreadyInstalled = Sentry.InstalledModules.Contains(Module);
+			bool bFitsSelectedSlot = false;
+
+			if (SelectedSlotIndex >= 0 && SelectedSlotIndex < Sentry.Slots.Num())
+			{
+				const FBFModuleSlot& SelectedSlot = Sentry.Slots[SelectedSlotIndex];
+				if (!SelectedSlot.bOccupied && !Module.Instalation.IsEmpty())
+				{
+					bFitsSelectedSlot = Module.Instalation.Matches(SelectedSlot.Tags);
+				}
+			}
+
+			// Filter: when slot selected, only show fitting modules
+			if (SelectedSlotIndex >= 0 && !bFitsSelectedSlot && !bAlreadyInstalled)
+			{
+				continue;
+			}
+
+			bool bIsUnconditional = Module.Instalation.IsEmpty();
+			bool bCanInstall = !bAlreadyInstalled && (bIsUnconditional || bFitsSelectedSlot);
+
+			auto ModuleButton = mm::Button(Module.GetName().ToString());
+
+			if (bAlreadyInstalled)
+			{
+				ModuleButton.SetButtonStyleColor(OccupiedColor);
+			}
+			else if (!bCanInstall)
+			{
+				ModuleButton.SetButtonStyleColor(DisabledColor);
+			}
+
+			if (ModuleButton)
+			{
+				if (bAlreadyInstalled)
+				{
+					RemoveModuleAndChildren(Sentry, Module);
+					SelectedSlotIndex = -1;
+				}
+				else if (bCanInstall)
+				{
+					Sentry.AddModule(Module);
+					SelectedSlotIndex = -1;
+				}
+			}
+		}
+	}
+
+	// ── Helpers ──
+
+	private UBFModuleDefinition FindModuleInSlot(ABSSentry Sentry, int SlotIndex) const
+	{
+		if (SlotIndex < 0 || SlotIndex >= Sentry.SlotModuleIndices.Num())
+		{
+			return nullptr;
+		}
+
+		int ModuleIndex = Sentry.SlotModuleIndices[SlotIndex];
+		if (ModuleIndex < 0 || ModuleIndex >= Sentry.InstalledModules.Num())
+		{
+			return nullptr;
+		}
+
+		return Sentry.InstalledModules[ModuleIndex];
+	}
+
+	private void RemoveModuleAndChildren(ABSSentry Sentry, UBFModuleDefinition Module)
+	{
+		TArray<UBFModuleDefinition> ToRemove;
+		ToRemove.Add(Module);
+
+		// Recursive: keep expanding until no new modules found
+		int SearchIndex = 0;
+		while (SearchIndex < ToRemove.Num())
+		{
+			UBFModuleDefinition Current = ToRemove[SearchIndex];
+			SearchIndex++;
+
+			for (const FBFModuleSlot& ProvidedSlot : Current.ProvidedSlots)
+			{
+				for (UBFModuleDefinition Installed : Sentry.InstalledModules)
+				{
+					if (ToRemove.Contains(Installed))
+					{
+						continue;
+					}
+					if (!Installed.Instalation.IsEmpty() && Installed.Instalation.Matches(ProvidedSlot.Tags))
+					{
+						ToRemove.Add(Installed);
+					}
+				}
+			}
+		}
+
+		TArray<UBFModuleDefinition> Remaining;
+		for (UBFModuleDefinition Installed : Sentry.InstalledModules)
+		{
+			if (!ToRemove.Contains(Installed))
+			{
+				Remaining.Add(Installed);
+			}
+		}
+
+		OwningWorkbench.ApplyModules(Remaining);
 	}
 }
