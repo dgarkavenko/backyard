@@ -4,5 +4,10 @@ class UBSModuleDefinition : UBFModuleDefinition
 	TArray<FBSModuleAssemblyElement> Elements;
 
 	default Elements.Add(FBSModuleAssemblyElement());
-	default Elements[0].ElementId = n"Base";
+	default Elements[0].ElementId = n"Base";	
+}
+
+mixin bool IsRootModule(UBFModuleDefinition Self)
+{
+	return Self.Instalation.IsEmpty();
 }

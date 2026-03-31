@@ -139,7 +139,7 @@ class UBSAssemblyScreen : UBSMMScreen
 
 		if (SelectedSlotIndex >= 0 && SelectedSlotIndex < ModularComponent.Slots.Num())
 		{
-			const FBFModuleSlot& SelectedSlot = ModularComponent.Slots[SelectedSlotIndex];
+			const FBFModuleSlot& SelectedSlot = ModularComponent.Slots[SelectedSlotIndex].SlotData;
 			FString SelectedLabel = GetLeafs(SelectedSlot.Tags);
 
 			if (SelectedLabel.IsEmpty())
@@ -152,16 +152,16 @@ class UBSAssemblyScreen : UBSMMScreen
 
 		for (int Index = 0; Index < ModularComponent.Slots.Num(); Index++)
 		{
-			const FBFModuleSlot& CurrentSlot = ModularComponent.Slots[Index];
+			const FBFModuleSlot& SlotData = ModularComponent.Slots[Index].SlotData;
 
-			FString SlotLabel = f"{GetLeafs(CurrentSlot.Tags)} [{CurrentSlot.Socket.ToString()}]";
+			FString SlotLabel = f"{GetLeafs(SlotData.Tags)} [{SlotData.Socket.ToString()}]";
 
 			if (SlotLabel.IsEmpty())
 			{
 				SlotLabel = f"Slot {Index}";
 			}
 
-			UBFModuleDefinition InstalledModule = ModularComponent.GetModuleForSlot(Index);
+			UBFModuleDefinition InstalledModule = ModularComponent.Slots[Index].Content.IsSet() ? ModularComponent.Slots[Index].GetDefinitionUnsafe(ModularComponent) : nullptr;
 			bool bIsSelected = (SelectedSlotIndex == Index);
 
 			if (InstalledModule != nullptr)
@@ -175,7 +175,7 @@ class UBSAssemblyScreen : UBSMMScreen
 			{
 				ButtonState.SetButtonStyleColor(SelectedColor);
 			}
-			else if (CurrentSlot.bOccupied)
+			else if (ModularComponent.Slots[Index].Content.IsSet())
 			{
 				ButtonState.SetButtonStyleColor(OccupiedColor);
 			}
@@ -191,15 +191,15 @@ class UBSAssemblyScreen : UBSMMScreen
 					SentryDebugF::LogAssembly(f"Assembly UI: deselected slot {Index}");
 					SelectedSlotIndex = -1;
 				}
-				else if (CurrentSlot.bOccupied && InstalledModule != nullptr)
+				else if (ModularComponent.Slots[Index].Content.IsSet())
 				{
 					SentryDebugF::LogAssembly(f"Assembly UI: removing occupied slot {Index} module='{InstalledModule.GetName()}'");
-					RemoveModuleAndChildren(ModularComponent, InstalledModule);
+					ModularComponent.RemoveModule(Index);
 					SelectedSlotIndex = -1;
 				}
 				else
 				{
-					SentryDebugF::LogAssembly(f"Assembly UI: selected slot {Index} socket='{CurrentSlot.Socket}'");
+					SentryDebugF::LogAssembly(f"Assembly UI: selected slot {Index} socket='{SlotData.Socket}'");
 					SelectedSlotIndex = Index;
 				}
 			}
@@ -229,30 +229,34 @@ class UBSAssemblyScreen : UBSMMScreen
 				continue;
 			}
 
-			bool bAlreadyInstalled = ModularComponent.InstalledModules.Contains(Module);
+			int InstalledCount = ModularComponent.InstalledModules.Num();
 			bool bRequiresSelectedSlot = !Module.Instalation.IsEmpty();
 			bool bCanInstall = false;
+			bool bCanRemoveSingleInstalled = InstalledCount == 1 && SelectedSlotIndex < 0;
 
-			if (!bAlreadyInstalled)
+			if (SelectedSlotIndex >= 0)
 			{
-				if (SelectedSlotIndex >= 0)
-				{
-					bCanInstall = ModularComponent.CanAddModuleToSlot(Module, SelectedSlotIndex);
-				}
-				else if (!bRequiresSelectedSlot)
-				{
-					bCanInstall = ModularComponent.CanAddModule(Module);
-				}
+				bCanInstall = ModularComponent.CanAddModuleTo(Module, SelectedSlotIndex);
+			}
+			else if (!bRequiresSelectedSlot)
+			{
+				bCanInstall = ModularComponent.CanAddModule(Module);
 			}
 
-			if (SelectedSlotIndex >= 0 && !bCanInstall && !bAlreadyInstalled)
+			if (SelectedSlotIndex >= 0 && !bCanInstall)
 			{
 				continue;
 			}
 
-			auto ModuleButton = mm::Button(Module.GetName().ToString());
+			FString ModuleLabel = Module.GetName().ToString();
+			if (InstalledCount > 0)
+			{
+				ModuleLabel = f"{ModuleLabel} x{InstalledCount}";
+			}
 
-			if (bAlreadyInstalled)
+			auto ModuleButton = mm::Button(ModuleLabel);
+
+			if (bCanRemoveSingleInstalled && !bCanInstall)
 			{
 				ModuleButton.SetButtonStyleColor(OccupiedColor);
 			}
@@ -263,31 +267,30 @@ class UBSAssemblyScreen : UBSMMScreen
 
 			if (ModuleButton)
 			{
-				if (bAlreadyInstalled)
-				{
-					SentryDebugF::LogAssembly(f"Assembly UI: removing '{Module.GetName()}'");
-					RemoveModuleAndChildren(ModularComponent, Module);
-					SelectedSlotIndex = -1;
-				}
-				else if (bCanInstall)
+				if (bCanInstall)
 				{
 					int InstallSlotIndex = SelectedSlotIndex;
 					FString InstallSocket = "<none>";
 					if (InstallSlotIndex >= 0 && InstallSlotIndex < ModularComponent.Slots.Num())
 					{
-						InstallSocket = ModularComponent.Slots[InstallSlotIndex].Socket.ToString();
+						InstallSocket = ModularComponent.Slots[InstallSlotIndex].SlotData.Socket.ToString();
 					}
 					SentryDebugF::LogAssembly(f"Assembly UI: installing '{Module.GetName()}' selectedSlot={InstallSlotIndex} socket='{InstallSocket}'");
 					if (InstallSlotIndex >= 0)
 					{
-						ModularComponent.AddModuleToSlot(Module, InstallSlotIndex);
+						ModularComponent.AddModule(Module, InstallSlotIndex);
 					}
 					else
 					{
-						ModularComponent.AddModule(Module);
+						ModularComponent.AddModule(Module, 0);
 					}
 					SelectedSlotIndex = -1;
-					ObservedCompositionVersion = ModularComponent.CompositionVersion;
+				}
+				else if (bCanRemoveSingleInstalled)
+				{
+					SentryDebugF::LogAssembly(f"Assembly UI: removing '{Module.GetName()}'");
+					ModularComponent.RemoveModule(SelectedSlotIndex);
+					SelectedSlotIndex = -1;
 				}
 			}
 		}
@@ -300,12 +303,6 @@ class UBSAssemblyScreen : UBSMMScreen
 			return;
 		}
 
-		if (ObservedCompositionVersion == ModularComponent.CompositionVersion)
-		{
-			return;
-		}
-
-		ObservedCompositionVersion = ModularComponent.CompositionVersion;
 		if (SelectedSlotIndex < 0)
 		{
 			return;
@@ -314,52 +311,13 @@ class UBSAssemblyScreen : UBSMMScreen
 		bool bInvalidSelection = SelectedSlotIndex >= ModularComponent.Slots.Num();
 		if (!bInvalidSelection)
 		{
-			bInvalidSelection = ModularComponent.Slots[SelectedSlotIndex].bOccupied;
+			bInvalidSelection = ModularComponent.Slots[SelectedSlotIndex].Content.IsSet();
 		}
 
 		if (bInvalidSelection)
 		{
-			SentryDebugF::LogAssembly(f"Assembly UI: cleared selected slot {SelectedSlotIndex} after composition version {ObservedCompositionVersion}");
+			SentryDebugF::LogAssembly(f"Assembly UI: cleared selected slot {SelectedSlotIndex} after composition version");
 			SelectedSlotIndex = -1;
 		}
-	}
-
-	private void RemoveModuleAndChildren(UBSModularComponent ModularComponent, UBFModuleDefinition Module)
-	{
-		TArray<UBFModuleDefinition> ToRemove;
-		ToRemove.Add(Module);
-
-		int SearchIndex = 0;
-		while (SearchIndex < ToRemove.Num())
-		{
-			UBFModuleDefinition Current = ToRemove[SearchIndex];
-			SearchIndex++;
-
-			for (const FBFModuleSlot& ProvidedSlot : Current.ProvidedSlots)
-			{
-				for (UBFModuleDefinition Installed : ModularComponent.InstalledModules)
-				{
-					if (ToRemove.Contains(Installed))
-					{
-						continue;
-					}
-					if (!Installed.Instalation.IsEmpty() && Installed.Instalation.Matches(ProvidedSlot.Tags))
-					{
-						ToRemove.Add(Installed);
-					}
-				}
-			}
-		}
-
-		TArray<UBFModuleDefinition> Remaining;
-		for (UBFModuleDefinition Installed : ModularComponent.InstalledModules)
-		{
-			if (!ToRemove.Contains(Installed))
-			{
-				Remaining.Add(Installed);
-			}
-		}
-
-		OwningWorkbench.ApplyModules(Remaining);
 	}
 }

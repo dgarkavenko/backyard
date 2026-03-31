@@ -214,16 +214,6 @@ class ABSAssemblyBench : AActor
 		MountSentry(NewSentry);
 	}
 
-	void ApplyModules(const TArray<UBFModuleDefinition>& Modules)
-	{
-		if (Sentry == nullptr || Sentry.ModularComponent == nullptr)
-		{
-			return;
-		}
-
-		Sentry.ModularComponent.SetModules(Modules);
-	}
-
 	// ── Snap Zone ──
 
 	UFUNCTION()

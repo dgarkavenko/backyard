@@ -17,9 +17,6 @@ struct FBFModuleSlot
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	FName Socket;
-
-	UPROPERTY(BlueprintReadWrite, Transient)
-	bool bOccupied = false;
 };
 
 UCLASS()

@@ -24,6 +24,7 @@ namespace SentryAim
 			Rotator0Constraint,
 			DeltaSeconds
 		);
+
 		Rotator0.SetRelativeRotation(Constrained);
 
 		if (Adapter.MuzzleComponent != nullptr)
@@ -58,147 +59,141 @@ namespace SentryAim
 
 class UBSSentriesSystem : UScriptWorldSubsystem
 {
-	TArray<int> SourceHandles;
-	TArray<int> SourceVersions;
-	TArray<ABSSentry> Sentries;
-	TArray<UBSSentryVisualAdapter> VisualAdapters;
-	TArray<UBSChassisDefinition> ChassisConfigs;
-	TArray<UBSPowerSupplyUnitDefinition> PSUConfigs;
-	TArray<UBSBatteryDefinition> BatteryConfigs;
-	TArray<FBSPowerState> PowerStates;
+	TArray<int> EntityHandle;
+
+	TArray<ABSSentry> Sentry;
+	TArray<UBSSentryVisualAdapter> VisualAdapter;
+	TArray<UBSChassisDefinition> ChassisConfig;
+	TArray<UBSPowerSupplyUnitDefinition> PSUConfig;
+	TArray<UBSBatteryDefinition> BatteryConfig;
+	TArray<FBSPowerState> PowerState;
+
+	TArray<FVector> TargetLocation;
+
 	TArray<int> FreeList;
+
 
 	UFUNCTION(BlueprintOverride)
 	void Tick(float DeltaSeconds)
 	{
-		SyncFromModularRuntime();
-
 		ACharacter PlayerCharacter = Gameplay::GetPlayerCharacter(0);
 		if (PlayerCharacter == nullptr)
 		{
 			return;
 		}
 
-		FVector TargetLocation = PlayerCharacter.ActorLocation;
+		FVector PlayerLocation = PlayerCharacter.ActorLocation;
 
-		for (int Index = 0; Index < SourceHandles.Num(); Index++)
+		for (int Index = 0; Index < EntityHandle.Num(); Index++)
 		{
-			if (SourceHandles[Index] < 0 || VisualAdapters[Index] == nullptr || ChassisConfigs[Index] == nullptr)
-			{
-				continue;
-			}
+			//check(EntityHandle[Index] >= 0);
+			check(VisualAdapter[Index] != nullptr);
+			check(ChassisConfig[Index] != nullptr);
+		}
 
-			if (PSUConfigs[Index] != nullptr)
+		//Acquire Target
+		for (int Index = 0; Index < EntityHandle.Num(); Index++)
+		{
+			if (EntityHandle[Index] >= 0)
 			{
-				PowerBehavior::Update(PSUConfigs[Index], BatteryConfigs[Index], PowerStates[Index], Sentries[Index], DeltaSeconds);
+				TargetLocation[Index] = PlayerLocation;
 			}
+			
+		}
 
-			if (PSUConfigs[Index] == nullptr || PowerStates[Index].SupplyRatio > 0.0f)
+		//Aim at target
+		for (int Index = 0; Index < EntityHandle.Num(); Index++)
+		{
+			if (EntityHandle[Index] >= 0)
 			{
-				SentryAim::Update(Sentries[Index], VisualAdapters[Index], TargetLocation, DeltaSeconds);
-			}
+				SentryAim::Update(Sentry[Index], VisualAdapter[Index], TargetLocation[Index], DeltaSeconds);			
+			}			
 		}
 	}
 
-	private void SyncFromModularRuntime()
+	void SyncFromModularRuntime(int Handle, UBSModularComponent ModularComponent)
 	{
-		UBSModularEntitiesSystem ModularSystem = UBSModularEntitiesSystem::Get();
-		if (ModularSystem == nullptr)
+		TArray<int> ActiveHandles;
+
+		AActor Owner = ModularComponent.Owner;
+		ABSSentry SyncedSentry = Cast<ABSSentry>(Owner);
+		if (ModularComponent == nullptr || SyncedSentry == nullptr || SyncedSentry.VisualAdapter == nullptr)
 		{
-			ClearAllRows();
 			return;
 		}
 
-		TArray<int> ActiveHandles;
+		UBSChassisDefinition ChassisDefinition = nullptr;
+		UBSPowerSupplyUnitDefinition PowerSupply = nullptr;
+		UBSBatteryDefinition Battery = nullptr;
+		UBSTurretDefinition Turret = nullptr;
 
-		for (int Handle = 0; Handle < ModularSystem.Components.Num(); Handle++)
-		{
-			UBSModularComponent ModularComponent = ModularSystem.Components[Handle];
-			AActor Owner = ModularSystem.Owners[Handle];
-			ABSSentry Sentry = Cast<ABSSentry>(Owner);
-			if (ModularComponent == nullptr || Sentry == nullptr || Sentry.VisualAdapter == nullptr)
-			{
-				continue;
-			}
-
-			UBSChassisDefinition ChassisDefinition = nullptr;
-			UBSPowerSupplyUnitDefinition PowerSupply = nullptr;
-			UBSBatteryDefinition Battery = nullptr;
-
-			for (UBFModuleDefinition Module : ModularComponent.InstalledModules)
-			{
-				if (Module == nullptr)
-				{
-					continue;
-				}
-
-				if (ChassisDefinition == nullptr)
-				{
-					ChassisDefinition = Cast<UBSChassisDefinition>(Module);
-				}
-				if (PowerSupply == nullptr)
-				{
-					PowerSupply = Cast<UBSPowerSupplyUnitDefinition>(Module);
-				}
-				if (Battery == nullptr)
-				{
-					Battery = Cast<UBSBatteryDefinition>(Module);
-				}
-			}
+		for (UBFModuleDefinition Module : ModularComponent.InstalledModules)
+		{	
+			check(Module != nullptr, "Module is nullptr");
 
 			if (ChassisDefinition == nullptr)
 			{
-				continue;
+				ChassisDefinition = Cast<UBSChassisDefinition>(Module);
 			}
-
-			ActiveHandles.Add(Handle);
-
-			int RowIndex = FindRowForHandle(Handle);
-			if (RowIndex < 0)
+			if (PowerSupply == nullptr)
 			{
-				RowIndex = AcquireRow();
-				SourceHandles[RowIndex] = Handle;
-				SourceVersions[RowIndex] = -1;
+				PowerSupply = Cast<UBSPowerSupplyUnitDefinition>(Module);
 			}
-
-			if (SourceVersions[RowIndex] != ModularComponent.CompositionVersion)
+			if (Turret == nullptr)
 			{
-				bool bBatteryChanged = BatteryConfigs[RowIndex] != Battery;
-
-				Sentries[RowIndex] = Sentry;
-				VisualAdapters[RowIndex] = Sentry.VisualAdapter;
-				ChassisConfigs[RowIndex] = ChassisDefinition;
-				PSUConfigs[RowIndex] = PowerSupply;
-				BatteryConfigs[RowIndex] = Battery;
-				SourceVersions[RowIndex] = ModularComponent.CompositionVersion;
-
-				if (bBatteryChanged)
-				{
-					PowerBehavior::InitState(PowerStates[RowIndex], Battery);
-				}
+				Battery = Cast<UBSBatteryDefinition>(Module);
 			}
 		}
 
-		for (int RowIndex = 0; RowIndex < SourceHandles.Num(); RowIndex++)
+		if (ChassisDefinition == nullptr)
 		{
-			if (SourceHandles[RowIndex] >= 0 && !ActiveHandles.Contains(SourceHandles[RowIndex]))
-			{
-				ReleaseRow(RowIndex);
-			}
+			return;
 		}
+
+		ActiveHandles.Add(Handle);
+
+		int32 RowIndex = EnsureHandleRow(Handle);
+
+		Sentry[RowIndex] = SyncedSentry;
+		VisualAdapter[RowIndex] = SyncedSentry.VisualAdapter;
+		ChassisConfig[RowIndex] = ChassisDefinition;
+		PSUConfig[RowIndex] = PowerSupply;
+		BatteryConfig[RowIndex] = Battery;
+
+		// for (int RowIndex = 0; RowIndex < SourceHandles.Num(); RowIndex++)
+		// {
+		// 	if (SourceHandles[RowIndex] >= 0 && !ActiveHandles.Contains(SourceHandles[RowIndex]))
+		// 	{
+		// 		ReleaseRow(RowIndex);
+		// 	}
+		// }
 	}
 
-	private int FindRowForHandle(int Handle) const
+	int32 EnsureHandleRow(int32 Handle)
 	{
-		for (int RowIndex = 0; RowIndex < SourceHandles.Num(); RowIndex++)
+		TOptional<int32> RowIndex = FindRowForHandle(Handle);
+		if (RowIndex.IsSet())
 		{
-			if (SourceHandles[RowIndex] == Handle)
+			return RowIndex.Value;
+		}
+		
+		int32 NewRow = AcquireRow();
+		EntityHandle[NewRow] = Handle;
+
+		return NewRow;
+	}
+
+	private TOptional<int> FindRowForHandle(int Handle) const
+	{
+		for (int RowIndex = 0; RowIndex < EntityHandle.Num(); RowIndex++)
+		{
+			if (EntityHandle[RowIndex] == Handle)
 			{
 				return RowIndex;
 			}
 		}
 
-		return -1;
+		return TOptional<int>();
 	}
 
 	private int AcquireRow()
@@ -210,28 +205,27 @@ class UBSSentriesSystem : UScriptWorldSubsystem
 			return RowIndex;
 		}
 
-		int RowIndex = SourceHandles.Num();
-		SourceHandles.Add(-1);
-		SourceVersions.Add(-1);
-		Sentries.Add(nullptr);
-		VisualAdapters.Add(nullptr);
-		ChassisConfigs.Add(nullptr);
-		PSUConfigs.Add(nullptr);
-		BatteryConfigs.Add(nullptr);
-		PowerStates.Add(FBSPowerState());
+		int RowIndex = EntityHandle.Num();
+		EntityHandle.Add(-1);
+		Sentry.Add(nullptr);
+		VisualAdapter.Add(nullptr);
+		ChassisConfig.Add(nullptr);
+		PSUConfig.Add(nullptr);
+		BatteryConfig.Add(nullptr);
+		TargetLocation.Add(FVector::ZeroVector);
+		PowerState.Add(FBSPowerState());
 		return RowIndex;
 	}
 
 	private void ReleaseRow(int RowIndex)
 	{
-		SourceHandles[RowIndex] = -1;
-		SourceVersions[RowIndex] = -1;
-		Sentries[RowIndex] = nullptr;
-		VisualAdapters[RowIndex] = nullptr;
-		ChassisConfigs[RowIndex] = nullptr;
-		PSUConfigs[RowIndex] = nullptr;
-		BatteryConfigs[RowIndex] = nullptr;
-		PowerStates[RowIndex] = FBSPowerState();
+		EntityHandle[RowIndex] = -1;
+		Sentry[RowIndex] = nullptr;
+		VisualAdapter[RowIndex] = nullptr;
+		ChassisConfig[RowIndex] = nullptr;
+		PSUConfig[RowIndex] = nullptr;
+		BatteryConfig[RowIndex] = nullptr;
+		PowerState[RowIndex] = FBSPowerState();
 
 		if (!FreeList.Contains(RowIndex))
 		{
@@ -241,7 +235,7 @@ class UBSSentriesSystem : UScriptWorldSubsystem
 
 	private void ClearAllRows()
 	{
-		for (int RowIndex = 0; RowIndex < SourceHandles.Num(); RowIndex++)
+		for (int RowIndex = 0; RowIndex < EntityHandle.Num(); RowIndex++)
 		{
 			ReleaseRow(RowIndex);
 		}

@@ -100,11 +100,11 @@ namespace SentryAssembly
 				continue;
 			}
 
-			int OccupiedSlotIndex = ModularComponent.GetOccupiedSlotIndexForModuleIndex(ModuleIndex);
+			TOptional<int32> OccupiedSlotIndex = ModularComponent.GetSlotByModuleIndex(ModuleIndex);
 			FBSBuiltModuleView BuiltView;
 
-			FName Socket = OccupiedSlotIndex >= 0 ? ModularComponent.Slots[OccupiedSlotIndex].Socket : NAME_None;
-			USceneComponent PreferredOwner = ResolveSlotOwner(ModularComponent, OccupiedSlotIndex, InstalledModuleViews, Adapter, Sentry);
+			FName Socket = OccupiedSlotIndex.IsSet() ? ModularComponent.Slots[OccupiedSlotIndex.Value].SlotData.Socket : NAME_None;
+			USceneComponent PreferredOwner = OccupiedSlotIndex.IsSet() ? ResolveSlotOwner(ModularComponent, OccupiedSlotIndex.Value, InstalledModuleViews, Adapter, Sentry) : nullptr;
 			BuiltView = BuildModuleElements(Module, PreferredOwner, Socket, Adapter, Sentry, Material);
 
 			auto ChassisDefinition = Cast<UBSChassisDefinition>(Module);
@@ -118,6 +118,8 @@ namespace SentryAssembly
 
 		FinishRebuild(Adapter, Sentry);
 		CacheGeometry(Adapter, Sentry);
+
+		ModularComponent.BroadcastRebuilt();
 
 		SentryDebugF::LogAssembled(Sentry, Adapter);		
 		SentryDebugF::ValidateNoGarbageComponents(Adapter, Sentry);
@@ -254,13 +256,13 @@ namespace SentryAssembly
 
 	USceneComponent ResolveSlotOwner(UBSModularComponent ModularComponent, int SlotIndex, const TArray<FBSBuiltModuleView>& InstalledModuleViews, UBSSentryVisualAdapter Adapter, ABSSentry Sentry)
 	{
-		if (SlotIndex < 0 || SlotIndex >= ModularComponent.Slots.Num())
+		if (SlotIndex >= ModularComponent.Slots.Num())
 		{
 			return nullptr;
 		}
 
-		FName Socket = ModularComponent.Slots[SlotIndex].Socket;
-		int ProviderModuleIndex = ModularComponent.GetSlotProviderModuleIndex(SlotIndex);
+		FName Socket = ModularComponent.Slots[SlotIndex].SlotData.Socket;
+		int ProviderModuleIndex = ModularComponent.Slots[SlotIndex].ParentIndex.IsSet() ? ModularComponent.Slots[SlotIndex].ParentIndex.Value : -1;
 		if (ProviderModuleIndex >= 0 && ProviderModuleIndex < InstalledModuleViews.Num())
 		{
 			USceneComponent PreferredOwner = FindBuiltSocketOwner(InstalledModuleViews[ProviderModuleIndex], Socket);

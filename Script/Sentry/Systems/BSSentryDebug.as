@@ -96,8 +96,8 @@ namespace SentryDebugF
 
 		for (int SlotIndex = 0; SlotIndex < SlotCount; SlotIndex++)
 		{
-			const FBFModuleSlot& ModuleSlot = Sentry.ModularComponent.Slots[SlotIndex];
-			FLinearColor PointColor = ModuleSlot.bOccupied ? FLinearColor::Yellow : FLinearColor::Green;
+			const FBFModuleSlot& ModuleSlot = Sentry.ModularComponent.Slots[SlotIndex].SlotData;
+			FLinearColor PointColor = Sentry.ModularComponent.Slots[SlotIndex].Content.IsSet() ? FLinearColor::Yellow : FLinearColor::Green;
 			FString Label = ModuleSlot.Socket.ToString();
 
 			if (ModuleSlot.Socket == NAME_None)

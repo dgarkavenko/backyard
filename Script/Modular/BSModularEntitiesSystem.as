@@ -3,55 +3,57 @@ class UBSModularEntitiesSystem : UScriptWorldSubsystem
 	TArray<AActor> Owners;
 	TArray<UBSModularComponent> Components;
 	TArray<FGameplayTagContainer> CapabilitySets;
-	TArray<int> CompositionVersions;
 	TArray<int> FreeList;
 
-	int Register(UBSModularComponent Component)
+	TOptional<int> Register(UBSModularComponent Component)
 	{
-		int Handle = -1;
+		TOptional<int> Handle;
 
 		if (FreeList.Num() > 0)
 		{
-			Handle = FreeList.Last();
+			Handle.Set(FreeList.Last());
 			FreeList.RemoveAt(FreeList.Num() - 1);
 		}
 		else
 		{
-			Handle = Components.Num();
+			Handle.Set(Components.Num());
 			Owners.Add(nullptr);
 			Components.Add(nullptr);
 			CapabilitySets.Add(FGameplayTagContainer());
-			CompositionVersions.Add(0);
 		}
 
-		UpdateRecord(Handle, Component);
+		UpdateRecord(Handle.Value, Component);
+		Component.OnComponentRebuilt.AddUFunction(this, n"ModularComponentRebuilt");
+
 		return Handle;
+	}
+
+	UFUNCTION()
+	private void ModularComponentRebuilt(UBSModularComponent ModularComponent)
+	{
+		if (ModularComponent.Owner.IsA(ABSSentry))
+		{
+			UBSSentriesSystem::Get().SyncFromModularRuntime(ModularComponent.RuntimeHandle.Value, ModularComponent);
+		}
 	}
 
 	void UpdateRecord(int Handle, UBSModularComponent Component)
 	{
-		if (Handle < 0 || Handle >= Components.Num())
-		{
-			return;
-		}
+		check(Handle < Components.Num());
 
 		Components[Handle] = Component;
 		Owners[Handle] = Component != nullptr ? Cast<AActor>(Component.Owner) : nullptr;
 		CapabilitySets[Handle] = Component != nullptr ? Component.Capabilities : FGameplayTagContainer();
-		CompositionVersions[Handle] = Component != nullptr ? Component.CompositionVersion : 0;
 	}
 
 	void Unregister(int Handle)
 	{
-		if (Handle < 0 || Handle >= Components.Num())
-		{
-			return;
-		}
+		check(Handle < Components.Num());
+		Components[Handle].OnComponentRebuilt.UnbindObject(this);
 
 		Owners[Handle] = nullptr;
 		Components[Handle] = nullptr;
 		CapabilitySets[Handle] = FGameplayTagContainer();
-		CompositionVersions[Handle] = 0;
 		FreeList.Add(Handle);
 	}
 }
