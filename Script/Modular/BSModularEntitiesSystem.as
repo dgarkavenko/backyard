@@ -33,7 +33,7 @@ class UBSModularEntitiesSystem : UScriptWorldSubsystem
 	{
 		if (ModularComponent.Owner.IsA(ABSSentry))
 		{
-			UBSSentriesSystem::Get().SyncFromModularRuntime(ModularComponent.RuntimeHandle.Value, ModularComponent);
+			UBSSentryWorldSubsystem::Get().SyncFromModularRuntime(ModularComponent.RuntimeHandle.Value, ModularComponent);
 		}
 	}
 
