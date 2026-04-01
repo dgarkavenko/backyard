@@ -156,7 +156,14 @@ void UBFProjectileSubsystem::Tick(float DeltaSeconds)
 				}
 			}
 #endif
-
+			
+			if (ensureMsgf(TrailsWriteCount < 1024, TEXT("Trail cache overflow")))
+			{
+				TrailsCacheId[TrailsWriteCount] = Projectile.Id;
+				TrailsCachePosition[TrailsWriteCount] = Start;
+				++TrailsWriteCount;
+			}
+			
 			if (bHit)
 			{
 				FBFProjectileImpactInfo& ImpactInfo = PendingImpacts.AddDefaulted_GetRef();
@@ -164,17 +171,17 @@ void UBFProjectileSubsystem::Tick(float DeltaSeconds)
 				ImpactInfo.SlotIndex = Index;
 				ImpactInfo.bHitType = true;
 				ReleaseProjectileSlot(Index);
+
+				Projectile.Position = HitResult.ImpactPoint;
+				TrailsCacheId[TrailsWriteCount] = Projectile.Id;
+				TrailsCachePosition[TrailsWriteCount] = HitResult.ImpactPoint;
+				++TrailsWriteCount;
 			}
 			else
 			{
 				Projectile.Position = End;
-				if (ensureMsgf(TrailsWriteCount < 1024, TEXT("Trail cache overflow")))
-				{
-					TrailsCacheId[TrailsWriteCount] = Projectile.Id;
-					TrailsCachePosition[TrailsWriteCount] = End;
-					++TrailsWriteCount;
-				}
 			}
+
 		}
 	}
 
