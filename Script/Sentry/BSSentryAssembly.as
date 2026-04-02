@@ -25,8 +25,15 @@ class UBSSentryVisualAdapter : UActorComponent
 
 	int RebuildGeneration = 0;
 
+	bool bHasYawPitchFastPath = false;
+	FVector Rotator1OffsetLocal;
+	FVector MuzzleOffsetLocal;
 	FVector MuzzleOffset;
-	FRotator MuzzleForwardRotation;
+	FQuat MuzzleLocalRotation;
+	float CachedYawLateralOffset = 0.0f;
+	float CachedYawForwardOffset = 0.0f;
+	float CachedPitchVerticalOffset = 0.0f;
+	float CachedPitchForwardOffset = 0.0f;
 
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()
@@ -133,8 +140,15 @@ namespace SentryAssembly
 		Adapter.RotatorConstraints.Empty();
 		Adapter.RotatorOffsets.Empty();
 		Adapter.MuzzleComponent = nullptr;
+		Adapter.bHasYawPitchFastPath = false;
+		Adapter.Rotator1OffsetLocal = FVector::ZeroVector;
+		Adapter.MuzzleOffsetLocal = FVector::ZeroVector;
 		Adapter.MuzzleOffset = FVector::ZeroVector;
-		Adapter.MuzzleForwardRotation = FRotator(0, 0, 0);
+		Adapter.MuzzleLocalRotation = FQuat::Identity;
+		Adapter.CachedYawLateralOffset = 0.0f;
+		Adapter.CachedYawForwardOffset = 0.0f;
+		Adapter.CachedPitchVerticalOffset = 0.0f;
+		Adapter.CachedPitchForwardOffset = 0.0f;
 		Adapter.ActiveModuleElements.Empty();
 
 		Sentry.Base.SetStaticMesh(nullptr);
@@ -358,8 +372,15 @@ namespace SentryAssembly
 	{
 		Adapter.RotatorOffsets.Empty();
 		Adapter.RotatorOffsets.SetNum(Adapter.RotatorComponents.Num());
+		Adapter.bHasYawPitchFastPath = false;
+		Adapter.Rotator1OffsetLocal = FVector::ZeroVector;
+		Adapter.MuzzleOffsetLocal = FVector::ZeroVector;
 		Adapter.MuzzleOffset = FVector::ZeroVector;
-		Adapter.MuzzleForwardRotation = FRotator(0, 0, 0);
+		Adapter.MuzzleLocalRotation = FQuat::Identity;
+		Adapter.CachedYawLateralOffset = 0.0f;
+		Adapter.CachedYawForwardOffset = 0.0f;
+		Adapter.CachedPitchVerticalOffset = 0.0f;
+		Adapter.CachedPitchForwardOffset = 0.0f;
 
 		if (Adapter.RotatorComponents.Num() < 2 || Adapter.RotatorComponents[0] == nullptr || Adapter.RotatorComponents[1] == nullptr)
 		{
@@ -373,6 +394,7 @@ namespace SentryAssembly
 		USceneComponent Rotator1 = Adapter.RotatorComponents[1];
 		Adapter.RotatorOffsets[0] = Sentry.Base.WorldTransform.InverseTransformPosition(Rotator0.WorldLocation);
 		Adapter.RotatorOffsets[1] = Rotator0.WorldTransform.InverseTransformPosition(Rotator1.WorldLocation);
+		Adapter.Rotator1OffsetLocal = Adapter.RotatorOffsets[1];
 
 		if (Adapter.MuzzleComponent == nullptr)
 		{
@@ -387,20 +409,48 @@ namespace SentryAssembly
 					break;
 				}
 			}
-
-			if (Adapter.MuzzleComponent == nullptr && Rotator1.DoesSocketExist(Sentry::MuzzleSocketName))
-			{
-				Adapter.MuzzleComponent = Rotator1;
-			}
 		}
 
 		if (Adapter.MuzzleComponent != nullptr && Adapter.MuzzleComponent.DoesSocketExist(Sentry::MuzzleSocketName))
 		{
 			FTransform MuzzleSocketWorld = Adapter.MuzzleComponent.GetSocketTransform(Sentry::MuzzleSocketName);
 			Adapter.MuzzleOffset = Rotator1.WorldTransform.InverseTransformPosition(MuzzleSocketWorld.Location);
-			FVector MuzzleForwardWorld = MuzzleSocketWorld.Rotation.ForwardVector;
-			Adapter.MuzzleForwardRotation = Rotator1.WorldTransform.InverseTransformVector(MuzzleForwardWorld).Rotation();
+			Adapter.MuzzleOffsetLocal = Adapter.MuzzleOffset;
+			Adapter.MuzzleLocalRotation = Rotator1.WorldRotation.Quaternion().Inverse() * MuzzleSocketWorld.Rotation;
+
+			if (HasYawPitchFastPath(Adapter))
+			{
+				Adapter.bHasYawPitchFastPath = true;
+				Adapter.CachedYawLateralOffset = Adapter.Rotator1OffsetLocal.Y + Adapter.MuzzleOffsetLocal.Y;
+				Adapter.CachedYawForwardOffset = Adapter.Rotator1OffsetLocal.X + Adapter.MuzzleOffsetLocal.X;
+				Adapter.CachedPitchVerticalOffset = Adapter.MuzzleOffsetLocal.Z;
+				Adapter.CachedPitchForwardOffset = Adapter.MuzzleOffsetLocal.X;
+			}
 		}
+	}
+
+	bool HasYawPitchFastPath(UBSSentryVisualAdapter Adapter)
+	{
+		if (Adapter == nullptr || Adapter.RotatorConstraints.Num() < 2)
+		{
+			return false;
+		}
+
+		const FBSSentryConstraint& Rotator0Constraint = Adapter.RotatorConstraints[0];
+		const FBSSentryConstraint& Rotator1Constraint = Adapter.RotatorConstraints[1];
+		if (!Rotator0Constraint.bYaw || Rotator0Constraint.bPitch || Rotator0Constraint.bRoll)
+		{
+			return false;
+		}
+
+		if (!Rotator1Constraint.bPitch || Rotator1Constraint.bYaw || Rotator1Constraint.bRoll)
+		{
+			return false;
+		}
+
+		FRotator MuzzleLocal = Adapter.MuzzleLocalRotation.Rotator().GetNormalized();
+		return Math::Abs(MuzzleLocal.Yaw) < 0.1f
+			&& Math::Abs(MuzzleLocal.Pitch) < 0.1f;
 	}
 
 	UStaticMeshComponent AcquireModuleElement(UBSSentryVisualAdapter Adapter, ABSSentry Sentry)

@@ -201,17 +201,7 @@ class ABSPlayerController : ABFPlayerController
 			return;
 		}
 
-		FBFProjectileSpawnParams Projectile;
-		
-		Projectile.DragType = EBFProjectileDrag::VeryLow;
-		Projectile.Instigator = this;
-		Projectile.Causer = Character;
-		Projectile.Lifetime = 10;
-		Projectile.Position = Character.Camera.WorldLocation + Character.Camera.ForwardVector * 100;
-		Projectile.Velocity = Character.Camera.ForwardVector * 730 * 10;
-
-		auto BFProjectileSubsystem = UBFProjectileSubsystem::Get();
-		BFProjectileSubsystem.SpawnProjectile(Projectile);
+		SpawnPrimaryProjectile(Character.Camera.WorldLocation + Character.Camera.ForwardVector * 100.0f, Character.Camera.ForwardVector, Character);
 
 		// UBSInteractionRegistry Focused = InteractorComponent.FocusedInteractable;
 		// if (Focused != nullptr)
@@ -289,5 +279,28 @@ class ABSPlayerController : ABFPlayerController
 	ABSCharacter GetBSCharacter()
 	{
 		return Cast<ABSCharacter>(GetControlledPawn());
+	}
+
+	void SpawnPrimaryProjectile(FVector Origin, FVector Direction, AActor Causer)
+	{
+		if (Causer == nullptr)
+		{
+			return;
+		}
+
+		FBFProjectileSpawnParams Projectile;
+
+		Projectile.DragType = EBFProjectileDrag::VeryLow;
+		Projectile.Instigator = this;
+		Projectile.Causer = Causer;
+		Projectile.Lifetime = 10;
+		Projectile.Position = Origin;
+		Projectile.Velocity = Direction.GetSafeNormal() * 730 * 10;
+
+		auto BFProjectileSubsystem = UBFProjectileSubsystem::Get();
+		if (BFProjectileSubsystem != nullptr)
+		{
+			BFProjectileSubsystem.SpawnProjectile(Projectile);
+		}
 	}
 }

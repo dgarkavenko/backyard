@@ -1,6 +1,8 @@
 namespace SentryDebugF
 {
 	const FConsoleVariable ShowSockets(f"BF.Sentry.ShowSockets", 0);
+	const FConsoleVariable ShowAim(f"BF.Sentry.ShowAim", 0);
+	const FConsoleVariable LogAim(f"BF.Sentry.LogAim", 0);
 	const FConsoleVariable LogAssemblyCVar(f"BF.Sentry.LogAssembly", 0);
 	const FConsoleVariable ValidateAssembly(f"BF.Sentry.ValidateAssembly", 0);
 
@@ -125,5 +127,85 @@ namespace SentryDebugF
 			System::DrawDebugPoint(SocketLocation, 12.0f, PointColor, 0, EDrawDebugSceneDepthPriorityGroup::Foreground);
 			System::DrawDebugString(SocketLocation, f"[{SlotIndex}] {Label}", nullptr, PointColor);
 		}
+	}
+
+	void DrawAim(ABSSentry Sentry, FVector TargetLocation)
+	{
+		if (Sentry == nullptr || Sentry.VisualAdapter == nullptr)
+		{
+			return;
+		}
+
+		UBSSentryVisualAdapter Adapter = Sentry.VisualAdapter;
+		if (Adapter.MuzzleComponent == nullptr || !Adapter.MuzzleComponent.DoesSocketExist(Sentry::MuzzleSocketName))
+		{
+			return;
+		}
+
+		FTransform MuzzleSocketWorld = Adapter.MuzzleComponent.GetSocketTransform(Sentry::MuzzleSocketName);
+		FVector MuzzleLocation = MuzzleSocketWorld.Location;
+		FVector ToTarget = TargetLocation - MuzzleLocation;
+		float DistanceToTarget = ToTarget.Size();
+		if (DistanceToTarget <= 0.0f)
+		{
+			return;
+		}
+
+		FVector TargetDirection = ToTarget / DistanceToTarget;
+		FVector MuzzleForward = MuzzleSocketWorld.Rotation.ForwardVector.GetSafeNormal();
+		float AimDot = MuzzleForward.DotProduct(TargetDirection);
+
+		System::DrawDebugLine(MuzzleLocation, TargetLocation, FLinearColor::Yellow, 0, 2);
+		System::DrawDebugLine(MuzzleLocation, MuzzleLocation + MuzzleForward * DistanceToTarget, FLinearColor::Blue, 0, 2);
+		System::DrawDebugPoint(TargetLocation, 12.0f, FLinearColor::Yellow, 0, EDrawDebugSceneDepthPriorityGroup::Foreground);
+		System::DrawDebugString(MuzzleLocation + FVector(0, 0, 18), f"dot={AimDot}", nullptr, FLinearColor::White);
+	}
+
+	void LogAimState(ABSSentry Sentry, UBSSentryVisualAdapter Adapter, FVector TargetLocation, const FRotator& DesiredRotator0Local, const FRotator& AppliedRotator0Local, const FRotator& DesiredRotator1Local, const FRotator& AppliedRotator1Local)
+	{
+		if (Sentry == nullptr || Adapter == nullptr)
+		{
+			return;
+		}
+
+		if (LogAim.Int <= 0)
+		{
+			return;
+		}
+
+		if (Adapter.MuzzleComponent == nullptr || !Adapter.MuzzleComponent.DoesSocketExist(Sentry::MuzzleSocketName))
+		{
+			return;
+		}
+
+		FTransform MuzzleSocketWorld = Adapter.MuzzleComponent.GetSocketTransform(Sentry::MuzzleSocketName);
+		FVector MuzzleLocation = MuzzleSocketWorld.Location;
+		FVector ToTarget = TargetLocation - MuzzleLocation;
+		float DistanceToTarget = ToTarget.Size();
+		if (DistanceToTarget <= 0.0f)
+		{
+			return;
+		}
+
+		FVector TargetDirection = ToTarget / DistanceToTarget;
+		FVector MuzzleForward = MuzzleSocketWorld.Rotation.ForwardVector.GetSafeNormal();
+		float AimDot = MuzzleForward.DotProduct(TargetDirection);
+		FRotator MuzzleError = (TargetDirection.Rotation() - MuzzleForward.Rotation()).GetNormalized();
+		FRotator MuzzleLocalRotation = Adapter.MuzzleLocalRotation.Rotator();
+
+		Log(
+			f"SentryAim sentry='{Sentry.GetName()}' " +
+			f"fastPath={Adapter.bHasYawPitchFastPath} " +
+			f"dot={AimDot} dist={DistanceToTarget} " +
+			f"muzzleError=(pitch={MuzzleError.Pitch}, yaw={MuzzleError.Yaw}, roll={MuzzleError.Roll}) " +
+			f"muzzleOffset=(x={Adapter.MuzzleOffset.X}, y={Adapter.MuzzleOffset.Y}, z={Adapter.MuzzleOffset.Z}) " +
+			f"cachedYaw=(forward={Adapter.CachedYawForwardOffset}, lateral={Adapter.CachedYawLateralOffset}) " +
+			f"cachedPitch=(forward={Adapter.CachedPitchForwardOffset}, vertical={Adapter.CachedPitchVerticalOffset}) " +
+			f"muzzleLocal=(pitch={MuzzleLocalRotation.Pitch}, yaw={MuzzleLocalRotation.Yaw}, roll={MuzzleLocalRotation.Roll}) " +
+			f"desiredR0=(pitch={DesiredRotator0Local.Pitch}, yaw={DesiredRotator0Local.Yaw}, roll={DesiredRotator0Local.Roll}) " +
+			f"appliedR0=(pitch={AppliedRotator0Local.Pitch}, yaw={AppliedRotator0Local.Yaw}, roll={AppliedRotator0Local.Roll}) " +
+			f"desiredR1=(pitch={DesiredRotator1Local.Pitch}, yaw={DesiredRotator1Local.Yaw}, roll={DesiredRotator1Local.Roll}) " +
+			f"appliedR1=(pitch={AppliedRotator1Local.Pitch}, yaw={AppliedRotator1Local.Yaw}, roll={AppliedRotator1Local.Roll})"
+		);
 	}
 }
