@@ -6,7 +6,7 @@ namespace SentryDebugF
 	const FConsoleVariable LogAssemblyCVar(f"BF.Sentry.LogAssembly", 0);
 	const FConsoleVariable ValidateAssembly(f"BF.Sentry.ValidateAssembly", 0);
 
-	void LogAssembled(ABSSentry Sentry, UBSSentryVisualAdapter Adapter)
+	void LogAssembled(ABSSentry Sentry, UBSSentryView Adapter)
 	{
 		if (LogAssemblyCVar.Int == 0)
 		{
@@ -20,7 +20,7 @@ namespace SentryDebugF
 		LogAssembly(f"Assembly | Rebuild Complete Sentry='{Sentry.GetName()}' BaseMesh='{BaseMeshName}' RotatorCount={Adapter.RotatorComponents.Num()} Rotator0='{Rotator0Name}' Rotator1='{Rotator1Name}' Muzzle='{MuzzleName}' ActiveElements={Adapter.ActiveModuleElements.Num()}");
 	}
 	
-	void ValidateNoGarbageComponents(UBSSentryVisualAdapter Adapter, ABSSentry Sentry)
+	void ValidateNoGarbageComponents(UBSSentryView Adapter, ABSSentry Sentry)
 	{
 		ValidatePoolState(Adapter.ModuleElementPool, Adapter.ActiveModuleElements);
 
@@ -46,7 +46,7 @@ namespace SentryDebugF
 		}
 	}	
 
-	bool IsManagedDynamicComponent(UBSSentryVisualAdapter Adapter, UStaticMeshComponent Component)
+	bool IsManagedDynamicComponent(UBSSentryView Adapter, UStaticMeshComponent Component)
 	{
 		return Adapter.ModuleElementPool.Contains(Component);
 	}
@@ -136,7 +136,7 @@ namespace SentryDebugF
 			return;
 		}
 
-		UBSSentryVisualAdapter Adapter = Sentry.VisualAdapter;
+		UBSSentryView Adapter = Sentry.VisualAdapter;
 		if (Adapter.MuzzleComponent == nullptr || !Adapter.MuzzleComponent.DoesSocketExist(Sentry::MuzzleSocketName))
 		{
 			return;
@@ -161,7 +161,7 @@ namespace SentryDebugF
 		System::DrawDebugString(MuzzleLocation + FVector(0, 0, 18), f"dot={AimDot}", nullptr, FLinearColor::White);
 	}
 
-	void LogAimState(ABSSentry Sentry, UBSSentryVisualAdapter Adapter, FVector TargetLocation, const FRotator& DesiredRotator0Local, const FRotator& AppliedRotator0Local, const FRotator& DesiredRotator1Local, const FRotator& AppliedRotator1Local)
+	void LogAimState(ABSSentry Sentry, UBSSentryView Adapter, FVector TargetLocation, const FRotator& DesiredRotator0Local, const FRotator& AppliedRotator0Local, const FRotator& DesiredRotator1Local, const FRotator& AppliedRotator1Local)
 	{
 		if (Sentry == nullptr || Adapter == nullptr)
 		{

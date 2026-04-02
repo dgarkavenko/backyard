@@ -1,18 +1,11 @@
 class UBSSentryWorldSubsystem : UScriptWorldSubsystem
 {
-	TArray<int> RowHandles;
-	TArray<int> FreeList;
+	TArray<ABSSentry> RowSentries;
 
-	TArray<ABSSentry> Sentry;
-	TArray<UBSSentryVisualAdapter> VisualAdapter;
-	TArray<UBSChassisDefinition> Chassis;
-	TArray<UBSTurretDefinition> Turret;
-	TArray<UBSPowerSupplyUnitDefinition> PSUConfig;
-	TArray<UBSBatteryDefinition> BatteryConfig;
-	TArray<FBSPowerState> PowerState;	
-	TArray<float> ShotCooldownRemaining;
-
-	TArray<FVector> TargetLocation;
+	TArray<FBSSentryBindings> Bindings;
+	TArray<FBSSentryTargetingRuntime> TargetingRuntime;
+	TArray<FBSSentryCombatRuntime> CombatRuntime;
+	TArray<FBSSentryPowerRuntime> PowerRuntime;
 
 	UFUNCTION(BlueprintOverride)
 	void Tick(float DeltaSeconds)
@@ -26,191 +19,172 @@ class UBSSentryWorldSubsystem : UScriptWorldSubsystem
 
 		FVector PlayerLocation = PlayerCharacter.ActorLocation;
 
-		for (int Index = 0; Index < RowHandles.Num(); Index++)
+		for (int Index = 0; Index < RowSentries.Num(); Index++)
 		{
-			if (RowHandles[Index] >= 0)
+			check(Bindings[Index].Sentry != nullptr);
+			check(Bindings[Index].VisualAdapter != nullptr);
+			check(Bindings[Index].Chassis != nullptr);
+		}
+
+		for (int Index = 0; Index < RowSentries.Num(); Index++)
+		{
+			TargetingRuntime[Index].TargetLocation = PlayerLocation;
+		}
+
+		for (int Index = 0; Index < RowSentries.Num(); Index++)
+		{
+			SentryAim::Update(Bindings[Index], TargetingRuntime[Index], DeltaSeconds);
+			if (SentryDebugF::ShowAim.Int > 0)
 			{
-				check(VisualAdapter[Index] != nullptr);
-				check(Chassis[Index] != nullptr);
+				SentryDebugF::DrawAim(Bindings[Index].Sentry, TargetingRuntime[Index].TargetLocation);
 			}
 		}
 
-		//Acquire Target
-		for (int Index = 0; Index < RowHandles.Num(); Index++)
+		for (int Index = 0; Index < RowSentries.Num(); Index++)
 		{
-			if (RowHandles[Index] >= 0)
-			{
-				TargetLocation[Index] = PlayerLocation;
-			}
-			
+			CombatRuntime[Index].ShotCooldownRemaining -= DeltaSeconds;
 		}
 
-		//Aim at target
-		for (int Index = 0; Index < RowHandles.Num(); Index++)
+		for (int Index = 0; Index < RowSentries.Num(); Index++)
 		{
-			if (RowHandles[Index] >= 0)
+			if (Bindings[Index].Turret != nullptr && CombatRuntime[Index].ShotCooldownRemaining < 0.0f)
 			{
-				SentryAim::Update(Sentry[Index], VisualAdapter[Index], TargetLocation[Index], DeltaSeconds);
-				if (SentryDebugF::ShowAim.Int > 0)
-				{
-					SentryDebugF::DrawAim(Sentry[Index], TargetLocation[Index]);
-				}
-			}			
-		}
-
-		for (int Index = 0; Index < RowHandles.Num(); Index++)
-		{
-			ShotCooldownRemaining[Index] -= DeltaSeconds;
-		}
-
-		for (int Index = 0; Index < RowHandles.Num(); Index++)
-		{
-			if (RowHandles[Index] >= 0 && Turret[Index] != nullptr)
-			{
-				if (ShotCooldownRemaining[Index] < 0)
-				{
-					SentryShoot::Update(Sentry[Index], VisualAdapter[Index], Turret[Index], TargetLocation[Index], ShotCooldownRemaining[Index]);
-				}				
+				SentryShoot::Update(Bindings[Index], TargetingRuntime[Index], CombatRuntime[Index]);
 			}
 		}
 	}
 
-	void SyncFromModularRuntime(int Handle, UBSModularComponent ModularComponent)
+	void SyncSentry(ABSSentry Sentry)
 	{
-		TArray<int> ActiveHandles;
+		FBSSentryBindings ResolvedBindings;
+		if (!ResolveBindings(Sentry, ResolvedBindings))
+		{
+			RemoveSentry(Sentry);
+			return;
+		}
 
-		AActor Owner = ModularComponent.Owner;
-		ABSSentry SyncedSentry = Cast<ABSSentry>(Owner);
-		if (ModularComponent == nullptr || SyncedSentry == nullptr || SyncedSentry.VisualAdapter == nullptr)
+		TOptional<int> ExistingRowIndex = FindRowIndex(Sentry);
+		bool bRowCreated = !ExistingRowIndex.IsSet();
+		int RowIndex = bRowCreated ? CreateRow(Sentry) : ExistingRowIndex.Value;
+		ApplyBindings(RowIndex, ResolvedBindings, bRowCreated);
+	}
+
+	void RemoveSentry(ABSSentry Sentry)
+	{
+		TOptional<int> ExistingRowIndex = FindRowIndex(Sentry);
+		if (!ExistingRowIndex.IsSet())
 		{
 			return;
 		}
 
-		UBSChassisDefinition ChassisDefinition = nullptr;
-		UBSPowerSupplyUnitDefinition PowerSupply = nullptr;
-		UBSBatteryDefinition Battery = nullptr;
-		UBSTurretDefinition TurretDefinition = nullptr;
+		int RowIndex = ExistingRowIndex.Value;
+		int LastRowIndex = RowSentries.Num() - 1;
+
+		if (RowIndex != LastRowIndex)
+		{
+			MoveRow(RowIndex, LastRowIndex);
+		}
+
+		RowSentries.RemoveAt(LastRowIndex);
+		Bindings.RemoveAt(LastRowIndex);
+		TargetingRuntime.RemoveAt(LastRowIndex);
+		CombatRuntime.RemoveAt(LastRowIndex);
+		PowerRuntime.RemoveAt(LastRowIndex);
+	}
+
+	private bool ResolveBindings(ABSSentry Sentry, FBSSentryBindings& OutBindings) const
+	{
+		if (Sentry == nullptr || Sentry.VisualAdapter == nullptr || Sentry.ModularComponent == nullptr)
+		{
+			return false;
+		}
+
+		UBSModularComponent ModularComponent = Sentry.ModularComponent;
+		OutBindings.Sentry = Sentry;
+		OutBindings.VisualAdapter = Sentry.VisualAdapter;
 
 		for (UBFModuleDefinition Module : ModularComponent.InstalledModules)
-		{	
+		{
 			check(Module != nullptr, "Module is nullptr");
 
-			if (ChassisDefinition == nullptr)
+			if (OutBindings.Chassis == nullptr)
 			{
-				ChassisDefinition = Cast<UBSChassisDefinition>(Module);
+				OutBindings.Chassis = Cast<UBSChassisDefinition>(Module);
 			}
-			if (PowerSupply == nullptr)
+			if (OutBindings.PowerSupply == nullptr)
 			{
-				PowerSupply = Cast<UBSPowerSupplyUnitDefinition>(Module);
+				OutBindings.PowerSupply = Cast<UBSPowerSupplyUnitDefinition>(Module);
 			}
-			if (TurretDefinition == nullptr)
+			if (OutBindings.Turret == nullptr)
 			{
-				TurretDefinition = Cast<UBSTurretDefinition>(Module);
+				OutBindings.Turret = Cast<UBSTurretDefinition>(Module);
 			}
-			if (Battery == nullptr)
+			if (OutBindings.Battery == nullptr)
 			{
-				Battery = Cast<UBSBatteryDefinition>(Module);
+				OutBindings.Battery = Cast<UBSBatteryDefinition>(Module);
 			}
 		}
 
-		if (ChassisDefinition == nullptr)
-		{
-			return;
-		}
-
-		ActiveHandles.Add(Handle);
-
-		int32 RowIndex = EnsureHandleRow(Handle);
-
-		Sentry[RowIndex] = SyncedSentry;
-		VisualAdapter[RowIndex] = SyncedSentry.VisualAdapter;
-		Chassis[RowIndex] = ChassisDefinition;
-		Turret[RowIndex] = TurretDefinition;
-		PSUConfig[RowIndex] = PowerSupply;
-		BatteryConfig[RowIndex] = Battery;
-
-		// for (int RowIndex = 0; RowIndex < SourceHandles.Num(); RowIndex++)
-		// {
-		// 	if (SourceHandles[RowIndex] >= 0 && !ActiveHandles.Contains(SourceHandles[RowIndex]))
-		// 	{
-		// 		ReleaseRow(RowIndex);
-		// 	}
-		// }
+		return OutBindings.Chassis != nullptr;
 	}
 
-	int32 EnsureHandleRow(int32 Handle)
+	private int CreateRow(ABSSentry Sentry)
 	{
-		TOptional<int32> RowIndex = FindRowForHandle(Handle);
-		if (RowIndex.IsSet())
-		{
-			return RowIndex.Value;
-		}
-		
-		int32 NewRow = AcquireRow();
-		RowHandles[NewRow] = Handle;
-
-		return NewRow;
+		int RowIndex = RowSentries.Num();
+		RowSentries.Add(Sentry);
+		Bindings.Add(FBSSentryBindings());
+		TargetingRuntime.Add(FBSSentryTargetingRuntime());
+		CombatRuntime.Add(FBSSentryCombatRuntime());
+		PowerRuntime.Add(FBSSentryPowerRuntime());
+		return RowIndex;
 	}
 
-	private TOptional<int> FindRowForHandle(int Handle) const
+	private void ApplyBindings(int RowIndex, const FBSSentryBindings& ResolvedBindings, bool bRowCreated)
 	{
-		for (int RowIndex = 0; RowIndex < RowHandles.Num(); RowIndex++)
+		bool bTurretChanged = bRowCreated || Bindings[RowIndex].Turret != ResolvedBindings.Turret;
+		bool bBatteryChanged = bRowCreated || Bindings[RowIndex].Battery != ResolvedBindings.Battery;
+
+		Bindings[RowIndex] = ResolvedBindings;
+
+		if (bTurretChanged)
 		{
-			if (RowHandles[RowIndex] == Handle)
+			CombatRuntime[RowIndex].ShotCooldownRemaining = 0.0f;
+		}
+
+		if (bBatteryChanged)
+		{
+			PowerBehavior::InitState(Bindings[RowIndex], PowerRuntime[RowIndex]);
+		}
+	}
+
+	private void MoveRow(int TargetRowIndex, int SourceRowIndex)
+	{
+		RowSentries[TargetRowIndex] = RowSentries[SourceRowIndex];
+		Bindings[TargetRowIndex] = Bindings[SourceRowIndex];
+		TargetingRuntime[TargetRowIndex] = TargetingRuntime[SourceRowIndex];
+		CombatRuntime[TargetRowIndex] = CombatRuntime[SourceRowIndex];
+		PowerRuntime[TargetRowIndex] = PowerRuntime[SourceRowIndex];
+	}
+
+	private TOptional<int> FindRowIndex(ABSSentry Sentry) const
+	{
+		for (int Index = 0; Index < RowSentries.Num(); Index++)
+		{
+			if (RowSentries[Index] == Sentry)
 			{
-				return RowIndex;
+				return Index;
 			}
 		}
 
 		return TOptional<int>();
 	}
 
-	private int AcquireRow()
-	{
-		if (FreeList.Num() > 0)
-		{
-			int RowIndex = FreeList.Last();
-			FreeList.RemoveAt(FreeList.Num() - 1);
-			return RowIndex;
-		}
-
-		int RowIndex = RowHandles.Num();
-		RowHandles.Add(-1);
-		Sentry.Add(nullptr);
-		VisualAdapter.Add(nullptr);
-		Chassis.Add(nullptr);
-		Turret.Add(nullptr);
-		PSUConfig.Add(nullptr);
-		BatteryConfig.Add(nullptr);
-		TargetLocation.Add(FVector::ZeroVector);
-		PowerState.Add(FBSPowerState());
-		ShotCooldownRemaining.Add(0.0f);
-		return RowIndex;
-	}
-
-	private void ReleaseRow(int RowIndex)
-	{
-		RowHandles[RowIndex] = -1;
-		Sentry[RowIndex] = nullptr;
-		VisualAdapter[RowIndex] = nullptr;
-		Chassis[RowIndex] = nullptr;
-		Turret[RowIndex] = nullptr;
-		PSUConfig[RowIndex] = nullptr;
-		BatteryConfig[RowIndex] = nullptr;
-		PowerState[RowIndex] = FBSPowerState();
-		ShotCooldownRemaining[RowIndex] = 0.0f;
-
-		if (!FreeList.Contains(RowIndex))
-		{
-			FreeList.Add(RowIndex);
-		}
-	}
-
 	private void ClearAllRows()
 	{
-		for (int RowIndex = 0; RowIndex < RowHandles.Num(); RowIndex++)
-		{
-			ReleaseRow(RowIndex);
-		}
+		RowSentries.Empty();
+		Bindings.Empty();
+		TargetingRuntime.Empty();
+		CombatRuntime.Empty();
+		PowerRuntime.Empty();
 	}
 }

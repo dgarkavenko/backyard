@@ -1,7 +1,16 @@
 namespace SentryAim
 {
-	void Update(ABSSentry Sentry, UBSSentryVisualAdapter Adapter, FVector TargetLocation, float DeltaSeconds)
+	void Update(const FBSSentryBindings& Bindings, FBSSentryTargetingRuntime& TargetingRuntime, float DeltaSeconds)
 	{
+		ABSSentry Sentry = Bindings.Sentry;
+		UBSSentryView Adapter = Bindings.VisualAdapter;
+		FVector TargetLocation = TargetingRuntime.TargetLocation;
+
+		if (Adapter == nullptr)
+		{
+			return;
+		}
+
 		if (!Adapter.HasAimRig())
 		{
 			return;
@@ -23,7 +32,7 @@ namespace SentryAim
 
 	void UpdateFastYawPitch(
 		ABSSentry Sentry,
-		UBSSentryVisualAdapter Adapter,
+		UBSSentryView Adapter,
 		USceneComponent Rotator0,
 		USceneComponent Rotator1,
 		const FBSSentryConstraint& Rotator0Constraint,
@@ -68,7 +77,7 @@ namespace SentryAim
 
 	void UpdateFallback(
 		ABSSentry Sentry,
-		UBSSentryVisualAdapter Adapter,
+		UBSSentryView Adapter,
 		USceneComponent Rotator0,
 		USceneComponent Rotator1,
 		const FBSSentryConstraint& Rotator0Constraint,
@@ -153,7 +162,7 @@ namespace SentryAim
 
 	FRotator ComputeDesiredRotator0FromFiringOrigin(
 		ABSSentry Sentry,
-		UBSSentryVisualAdapter Adapter,
+		UBSSentryView Adapter,
 		FVector Rotator0Offset,
 		FVector Rotator1Offset,
 		const FRotator& Rotator0Rotation,
@@ -172,7 +181,7 @@ namespace SentryAim
 
 	FRotator ComputeDesiredRotator1FromMuzzle(
 		ABSSentry Sentry,
-		UBSSentryVisualAdapter Adapter,
+		UBSSentryView Adapter,
 		FVector Rotator0Offset,
 		FVector Rotator1Offset,
 		const FRotator& Rotator0Rotation,
@@ -231,7 +240,7 @@ namespace SentryAim
 
 	FVector ComputeMuzzleWorldLocation(
 		ABSSentry Sentry,
-		UBSSentryVisualAdapter Adapter,
+		UBSSentryView Adapter,
 		FVector Rotator0Offset,
 		FVector Rotator1Offset,
 		const FRotator& Rotator0Rotation,

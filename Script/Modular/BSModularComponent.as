@@ -50,55 +50,10 @@ class UBSModularComponent : UActorComponent
 	UPROPERTY()
 	FGameplayTagContainer Capabilities;
 
-	TOptional<int> RuntimeHandle;
-
 	UPROPERTY(Category = "Delegates")
 	FBSUBSModularComponentDelegate OnCompositionChanged;
 
-	UPROPERTY(Category = "Delegates")
-	FBSUBSModularComponentDelegate OnComponentRebuilt;
-
 	default EnsureRootSlot();
-
-	UFUNCTION(BlueprintOverride)
-	void BeginPlay()
-	{
-		RegisterRuntime();
-	}
-
-	UFUNCTION(BlueprintOverride)
-	void EndPlay(EEndPlayReason Reason)
-	{
-		UBSModularEntitiesSystem Subsystem = UBSModularEntitiesSystem::Get();
-		if (Subsystem != nullptr && RuntimeHandle.IsSet())
-		{
-			Subsystem.Unregister(RuntimeHandle.Value);
-			RuntimeHandle = -1;
-		}
-	}
-
-	void BroadcastRebuilt()
-	{
-		OnComponentRebuilt.Broadcast(this);
-	}
-
-	private void RegisterRuntime()
-	{
-		UBSModularEntitiesSystem Subsystem = UBSModularEntitiesSystem::Get();
-		if (Subsystem == nullptr)
-		{
-			return;
-		}
-
-		if (RuntimeHandle.IsSet())
-		{
-			Subsystem.UpdateRecord(RuntimeHandle.Value, this);
-		}
-		else
-		{
-			RuntimeHandle = Subsystem.Register(this);
-		}
-	}
 
 	bool CanAddModule(UBFModuleDefinition NewModule) const
 	{

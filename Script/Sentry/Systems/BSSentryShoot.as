@@ -1,10 +1,25 @@
 namespace SentryShoot
 {
-	void Update(ABSSentry Sentry, UBSSentryVisualAdapter Adapter, UBSTurretDefinition Turret, FVector TargetLocation, float& ShotCooldownRemaining)
+	void Update(const FBSSentryBindings& Bindings, FBSSentryTargetingRuntime& TargetingRuntime, FBSSentryCombatRuntime& CombatRuntime)
 	{
-		ShotCooldownRemaining = 60.0f / float(Turret.RPM);
+		ABSSentry Sentry = Bindings.Sentry;
+		UBSSentryView Adapter = Bindings.VisualAdapter;
+		UBSTurretDefinition Turret = Bindings.Turret;
+		FVector TargetLocation = TargetingRuntime.TargetLocation;
 
-		if (Turret.RPM <= 0 || Adapter.MuzzleComponent == nullptr || !Adapter.MuzzleComponent.DoesSocketExist(Sentry::MuzzleSocketName))
+		if (Sentry == nullptr || Adapter == nullptr || Turret == nullptr)
+		{
+			return;
+		}
+
+		if (Turret.RPM <= 0)
+		{
+			return;
+		}
+
+		CombatRuntime.ShotCooldownRemaining = 60.0f / float(Turret.RPM);
+
+		if (Adapter.MuzzleComponent == nullptr || !Adapter.MuzzleComponent.DoesSocketExist(Sentry::MuzzleSocketName))
 		{
 			return;
 		}

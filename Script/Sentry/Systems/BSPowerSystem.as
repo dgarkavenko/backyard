@@ -1,83 +1,72 @@
-struct FBSPowerState
-{
-	ABSPowerSource ConnectedSource;
-	float AvailableWatts;
-	float TotalDemand;
-	float SupplyRatio = 1.0f;
-	float BatteryRemaining;
-	bool bOnBattery = false;
-}
-
 namespace PowerBehavior
 {
-	void Update(UBSPowerSupplyUnitDefinition PSU, UBSBatteryDefinition Battery,
-				FBSPowerState& State, ABSSentry Sentry, float DeltaSeconds)
+	void Update(const FBSSentryBindings& Bindings, FBSSentryPowerRuntime& PowerRuntime, float DeltaSeconds)
 	{
-		if (PSU == nullptr)
+		if (Bindings.PowerSupply == nullptr)
 		{
-			State.AvailableWatts = 0.0f;
-			State.SupplyRatio = 0.0f;
+			PowerRuntime.State.AvailableWatts = 0.0f;
+			PowerRuntime.State.SupplyRatio = 0.0f;
 			return;
 		}
 
-		FindSource(PSU, State, Sentry);
+		FindSource(Bindings, PowerRuntime.State);
 
 		float SourceWatts = 0.0f;
-		if (State.ConnectedSource != nullptr)
+		if (PowerRuntime.State.ConnectedSource != nullptr)
 		{
-			SourceWatts = State.ConnectedSource.DrawPower(PSU.MaxDraw, DeltaSeconds);
-			SourceWatts *= PSU.Efficiency;
+			SourceWatts = PowerRuntime.State.ConnectedSource.DrawPower(Bindings.PowerSupply.MaxDraw, DeltaSeconds);
+			SourceWatts *= Bindings.PowerSupply.Efficiency;
 		}
 
 		float BatteryWatts = 0.0f;
-		if (Battery != nullptr && State.BatteryRemaining > 0.0f)
+		if (Bindings.Battery != nullptr && PowerRuntime.State.BatteryRemaining > 0.0f)
 		{
-			float Shortfall = PSU.MaxDraw * PSU.Efficiency - SourceWatts;
+			float Shortfall = Bindings.PowerSupply.MaxDraw * Bindings.PowerSupply.Efficiency - SourceWatts;
 			if (Shortfall > 0.0f)
 			{
-				float MaxFromBattery = Math::Min(Shortfall, Battery.MaxDischargeRate);
+				float MaxFromBattery = Math::Min(Shortfall, Bindings.Battery.MaxDischargeRate);
 				float EnergyNeeded = MaxFromBattery * DeltaSeconds;
-				if (EnergyNeeded > State.BatteryRemaining)
+				if (EnergyNeeded > PowerRuntime.State.BatteryRemaining)
 				{
-					BatteryWatts = State.BatteryRemaining / DeltaSeconds;
-					State.BatteryRemaining = 0.0f;
+					BatteryWatts = PowerRuntime.State.BatteryRemaining / DeltaSeconds;
+					PowerRuntime.State.BatteryRemaining = 0.0f;
 				}
 				else
 				{
 					BatteryWatts = MaxFromBattery;
-					State.BatteryRemaining -= EnergyNeeded;
+					PowerRuntime.State.BatteryRemaining -= EnergyNeeded;
 				}
 			}
 		}
 
-		State.AvailableWatts = SourceWatts + BatteryWatts;
-		State.bOnBattery = (SourceWatts == 0.0f && BatteryWatts > 0.0f);
+		PowerRuntime.State.AvailableWatts = SourceWatts + BatteryWatts;
+		PowerRuntime.State.bOnBattery = (SourceWatts == 0.0f && BatteryWatts > 0.0f);
 
-		if (State.TotalDemand > 0.0f)
+		if (PowerRuntime.State.TotalDemand > 0.0f)
 		{
-			State.SupplyRatio = Math::Clamp(State.AvailableWatts / State.TotalDemand, 0.0f, 1.0f);
+			PowerRuntime.State.SupplyRatio = Math::Clamp(PowerRuntime.State.AvailableWatts / PowerRuntime.State.TotalDemand, 0.0f, 1.0f);
 		}
 		else
 		{
-			State.SupplyRatio = 1.0f;
+			PowerRuntime.State.SupplyRatio = 1.0f;
 		}
 	}
 
-	void InitState(FBSPowerState& State, UBSBatteryDefinition Battery)
+	void InitState(const FBSSentryBindings& Bindings, FBSSentryPowerRuntime& PowerRuntime)
 	{
-		State = FBSPowerState();
-		if (Battery != nullptr)
+		PowerRuntime.State = FBSPowerState();
+		if (Bindings.Battery != nullptr)
 		{
-			State.BatteryRemaining = Battery.Capacity;
+			PowerRuntime.State.BatteryRemaining = Bindings.Battery.Capacity;
 		}
 	}
 
-	void FindSource(UBSPowerSupplyUnitDefinition PSU, FBSPowerState& State, ABSSentry Sentry)
+	void FindSource(const FBSSentryBindings& Bindings, FBSPowerState& State)
 	{
 		if (State.ConnectedSource != nullptr)
 		{
-			float DistanceSquared = Sentry.ActorLocation.DistSquared(State.ConnectedSource.ActorLocation);
-			if (DistanceSquared > PSU.ConnectionRange * PSU.ConnectionRange || !State.ConnectedSource.HasFuel())
+			float DistanceSquared = Bindings.Sentry.ActorLocation.DistSquared(State.ConnectedSource.ActorLocation);
+			if (DistanceSquared > Bindings.PowerSupply.ConnectionRange * Bindings.PowerSupply.ConnectionRange || !State.ConnectedSource.HasFuel())
 			{
 				State.ConnectedSource = nullptr;
 			}
@@ -90,7 +79,7 @@ namespace PowerBehavior
 		TArray<ABSPowerSource> FoundSources;
 		GetAllActorsOfClass(FoundSources);
 
-		float BestDistanceSquared = PSU.ConnectionRange * PSU.ConnectionRange;
+		float BestDistanceSquared = Bindings.PowerSupply.ConnectionRange * Bindings.PowerSupply.ConnectionRange;
 		ABSPowerSource BestSource = nullptr;
 
 		for (ABSPowerSource Source : FoundSources)
@@ -100,7 +89,7 @@ namespace PowerBehavior
 				continue;
 			}
 
-			float DistanceSquared = Sentry.ActorLocation.DistSquared(Source.ActorLocation);
+			float DistanceSquared = Bindings.Sentry.ActorLocation.DistSquared(Source.ActorLocation);
 			if (DistanceSquared < BestDistanceSquared)
 			{
 				BestDistanceSquared = DistanceSquared;

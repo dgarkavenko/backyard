@@ -10,82 +10,9 @@ struct FBSBuiltModuleView
 	USceneComponent PrimaryComponent;
 }
 
-class UBSSentryVisualAdapter : UActorComponent
-{
-	TArray<UStaticMeshComponent> ModuleElementPool;
-	TArray<int> ModuleElementGenerations;
-	TArray<UStaticMeshComponent> ActiveModuleElements;
-
-	TMap<FName, USceneComponent> SocketOwnerCache;
-
-	TArray<USceneComponent> RotatorComponents;
-	TArray<FBSSentryConstraint> RotatorConstraints;
-	TArray<FVector> RotatorOffsets;
-	USceneComponent MuzzleComponent;
-
-	int RebuildGeneration = 0;
-
-	bool bHasYawPitchFastPath = false;
-	FVector Rotator1OffsetLocal;
-	FVector MuzzleOffsetLocal;
-	FVector MuzzleOffset;
-	FQuat MuzzleLocalRotation;
-	float CachedYawLateralOffset = 0.0f;
-	float CachedYawForwardOffset = 0.0f;
-	float CachedPitchVerticalOffset = 0.0f;
-	float CachedPitchForwardOffset = 0.0f;
-
-	UFUNCTION(BlueprintOverride)
-	void BeginPlay()
-	{
-		UBSModularComponent ModularComponent = UBSModularComponent::Get(Owner);
-		if (ModularComponent != nullptr)
-		{
-			ModularComponent.OnCompositionChanged.AddUFunction(this, n"OnCompositionChanged");
-		}
-
-		RebuildFromCurrentModules();
-	}
-
-	UFUNCTION()
-	void OnCompositionChanged(UBSModularComponent ModularComponent)
-	{
-		RebuildFromCurrentModules();
-	}
-
-	void RebuildFromCurrentModules()
-	{
-		ABSSentry Sentry = Cast<ABSSentry>(Owner);
-		UBSModularComponent ModularComponent = UBSModularComponent::Get(Owner);
-		if (Sentry == nullptr || ModularComponent == nullptr)
-		{
-			return;
-		}
-
-		SentryAssembly::Rebuild(this, Sentry, ModularComponent, Sentry.Material);
-	}
-
-	bool HasAimRig() const
-	{
-		return RotatorComponents.Num() >= 2
-			&& RotatorComponents[0] != nullptr
-			&& RotatorComponents[1] != nullptr;
-	}
-
-	USceneComponent GetDefaultAttachParent(ABSSentry Sentry) const
-	{
-		if (RotatorComponents.Num() > 0)
-		{
-			return RotatorComponents.Last();
-		}
-
-		return Sentry.Base;
-	}
-}
-
 namespace SentryAssembly
 {
-	void Rebuild(UBSSentryVisualAdapter Adapter, ABSSentry Sentry, UBSModularComponent ModularComponent, UMaterialInterface Material)
+	void Rebuild(UBSSentryView Adapter, ABSSentry Sentry, UBSModularComponent ModularComponent, UMaterialInterface Material)
 	{
 		BeginRebuild(Adapter, Sentry);
 		SentryDebugF::LogAssembly(f"Assembly: rebuild sentry='{Sentry.GetName()}' modules={ModularComponent.InstalledModules.Num()}");
@@ -126,13 +53,17 @@ namespace SentryAssembly
 		FinishRebuild(Adapter, Sentry);
 		CacheGeometry(Adapter, Sentry);
 
-		ModularComponent.BroadcastRebuilt();
+		UBSSentryWorldSubsystem SentrySubsystem = UBSSentryWorldSubsystem::Get();
+		if (SentrySubsystem != nullptr)
+		{
+			SentrySubsystem.SyncSentry(Sentry);
+		}
 
 		SentryDebugF::LogAssembled(Sentry, Adapter);		
 		SentryDebugF::ValidateNoGarbageComponents(Adapter, Sentry);
 	}
 
-	void BeginRebuild(UBSSentryVisualAdapter Adapter, ABSSentry Sentry)
+	void BeginRebuild(UBSSentryView Adapter, ABSSentry Sentry)
 	{
 		Adapter.RebuildGeneration++;
 		Adapter.SocketOwnerCache.Empty();
@@ -154,12 +85,12 @@ namespace SentryAssembly
 		Sentry.Base.SetStaticMesh(nullptr);
 	}
 
-	void FinishRebuild(UBSSentryVisualAdapter Adapter, ABSSentry Sentry)
+	void FinishRebuild(UBSSentryView Adapter, ABSSentry Sentry)
 	{
 		DeactivateUnusedPoolComponents(Adapter.ModuleElementPool, Adapter.ModuleElementGenerations, Adapter.RebuildGeneration, Sentry);
 	}
 
-	void CacheChassis(UBSChassisDefinition Definition, FBSBuiltModuleView BuiltView, UBSSentryVisualAdapter Adapter)
+	void CacheChassis(UBSChassisDefinition Definition, FBSBuiltModuleView BuiltView, UBSSentryView Adapter)
 	{
 		for (int RotatorIndex = 0; RotatorIndex < Definition.Rotators.Num(); RotatorIndex++)
 		{
@@ -177,7 +108,7 @@ namespace SentryAssembly
 		}
 	}
 
-	FBSBuiltModuleView BuildModuleElements(UBSModuleDefinition Definition, USceneComponent RootOwner, FName RootSocket, UBSSentryVisualAdapter Adapter, ABSSentry Sentry, UMaterialInterface Material)
+	FBSBuiltModuleView BuildModuleElements(UBSModuleDefinition Definition, USceneComponent RootOwner, FName RootSocket, UBSSentryView Adapter, ABSSentry Sentry, UMaterialInterface Material)
 	{
 		FBSBuiltModuleView View;
 		if (Definition == nullptr)
@@ -268,7 +199,7 @@ namespace SentryAssembly
 		return View;
 	}
 
-	USceneComponent ResolveSlotOwner(UBSModularComponent ModularComponent, int SlotIndex, const TArray<FBSBuiltModuleView>& InstalledModuleViews, UBSSentryVisualAdapter Adapter, ABSSentry Sentry)
+	USceneComponent ResolveSlotOwner(UBSModularComponent ModularComponent, int SlotIndex, const TArray<FBSBuiltModuleView>& InstalledModuleViews, UBSSentryView Adapter, ABSSentry Sentry)
 	{
 		if (SlotIndex >= ModularComponent.Slots.Num())
 		{
@@ -368,7 +299,7 @@ namespace SentryAssembly
 		}
 	}
 
-	void CacheGeometry(UBSSentryVisualAdapter Adapter, ABSSentry Sentry)
+	void CacheGeometry(UBSSentryView Adapter, ABSSentry Sentry)
 	{
 		Adapter.RotatorOffsets.Empty();
 		Adapter.RotatorOffsets.SetNum(Adapter.RotatorComponents.Num());
@@ -429,7 +360,7 @@ namespace SentryAssembly
 		}
 	}
 
-	bool HasYawPitchFastPath(UBSSentryVisualAdapter Adapter)
+	bool HasYawPitchFastPath(UBSSentryView Adapter)
 	{
 		if (Adapter == nullptr || Adapter.RotatorConstraints.Num() < 2)
 		{
@@ -453,7 +384,7 @@ namespace SentryAssembly
 			&& Math::Abs(MuzzleLocal.Pitch) < 0.1f;
 	}
 
-	UStaticMeshComponent AcquireModuleElement(UBSSentryVisualAdapter Adapter, ABSSentry Sentry)
+	UStaticMeshComponent AcquireModuleElement(UBSSentryView Adapter, ABSSentry Sentry)
 	{
 		if (Sentry.Base.StaticMesh == nullptr)
 		{
@@ -506,7 +437,7 @@ namespace SentryAssembly
 		Component.SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 
-	USceneComponent FindSocketOwner(UBSSentryVisualAdapter Adapter, ABSSentry Sentry, FName Socket)
+	USceneComponent FindSocketOwner(UBSSentryView Adapter, ABSSentry Sentry, FName Socket)
 	{
 		if (Socket == NAME_None)
 		{
@@ -523,7 +454,7 @@ namespace SentryAssembly
 		return Found;
 	}
 
-	USceneComponent SearchSocketOwner(UBSSentryVisualAdapter Adapter, ABSSentry Sentry, FName Socket)
+	USceneComponent SearchSocketOwner(UBSSentryView Adapter, ABSSentry Sentry, FName Socket)
 	{
 		if (Sentry.Base.DoesSocketExist(Socket))
 		{

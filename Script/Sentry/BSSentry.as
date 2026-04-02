@@ -17,7 +17,7 @@ class ABSSentry : AActor
 	UBSModularComponent ModularComponent;
 
 	UPROPERTY(DefaultComponent)
-	UBSSentryVisualAdapter VisualAdapter;
+	UBSSentryView VisualAdapter;
 
 	UPROPERTY(DefaultComponent, RootComponent)
 	UStaticMeshComponent Base;
