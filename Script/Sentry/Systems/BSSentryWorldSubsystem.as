@@ -2,7 +2,10 @@ class UBSSentryWorldSubsystem : UScriptWorldSubsystem
 {
 	TArray<ABSSentry> RowSentries;
 
-	TArray<FBSSentryBindings> Bindings;
+	TArray<FBSSentryStatics> Statics;
+
+	TArray<FBSSentryAimCache> AimCache;
+
 	TArray<FBSSentryTargetingRuntime> TargetingRuntime;
 	TArray<FBSSentryCombatRuntime> CombatRuntime;
 	TArray<FBSSentryPowerRuntime> PowerRuntime;
@@ -21,9 +24,9 @@ class UBSSentryWorldSubsystem : UScriptWorldSubsystem
 
 		for (int Index = 0; Index < RowSentries.Num(); Index++)
 		{
-			check(Bindings[Index].Sentry != nullptr);
-			check(Bindings[Index].SentryView != nullptr);
-			check(Bindings[Index].Chassis != nullptr);
+			check(Statics[Index].Sentry != nullptr);
+			check(Statics[Index].SentryView != nullptr);
+			check(Statics[Index].Chassis != nullptr);
 		}
 
 		for (int Index = 0; Index < RowSentries.Num(); Index++)
@@ -33,11 +36,7 @@ class UBSSentryWorldSubsystem : UScriptWorldSubsystem
 
 		for (int Index = 0; Index < RowSentries.Num(); Index++)
 		{
-			SentryAim::Update(Bindings[Index], TargetingRuntime[Index], DeltaSeconds);
-			if (SentryDebugF::ShowAim.Int > 0)
-			{
-				SentryDebugF::DrawAim(Bindings[Index].Sentry, TargetingRuntime[Index].TargetLocation);
-			}
+			SentryAim::Solve(AimCache[Index], TargetingRuntime[Index], DeltaSeconds);
 		}
 
 		for (int Index = 0; Index < RowSentries.Num(); Index++)
@@ -47,17 +46,31 @@ class UBSSentryWorldSubsystem : UScriptWorldSubsystem
 
 		for (int Index = 0; Index < RowSentries.Num(); Index++)
 		{
-			if (Bindings[Index].Turret != nullptr && CombatRuntime[Index].ShotCooldownRemaining < 0.0f)
+			SentryAim::Apply(AimCache[Index], TargetingRuntime[Index]);
+		}
+
+		for (int Index = 0; Index < RowSentries.Num(); Index++)
+		{
+			if (Statics[Index].Turret != nullptr && CombatRuntime[Index].ShotCooldownRemaining < 0.0f)
 			{
-				SentryShoot::Update(Bindings[Index], TargetingRuntime[Index], CombatRuntime[Index]);
+				SentryShoot::Update(Statics[Index], AimCache[Index], TargetingRuntime[Index], CombatRuntime[Index]);
 			}
+		}
+
+		for (int Index = 0; Index < RowSentries.Num(); Index++)
+		{
+			if (SentryDebugF::ShowAim.Int > 0)
+			{
+				SentryDebugF::DrawAim(Statics[Index].Sentry, TargetingRuntime[Index]);
+			}
+
+			SentryDebugF::LogAimState(Statics[Index].Sentry, AimCache[Index], TargetingRuntime[Index]);
 		}
 	}
 
 	void SyncSentry(ABSSentry Sentry)
 	{
-		FBSSentryBindings ResolvedBindings;
-		if (!ResolveBindings(Sentry, ResolvedBindings))
+		if (Sentry == nullptr || Sentry.ModularComponent == nullptr || Sentry.ModularView == nullptr)
 		{
 			RemoveSentry(Sentry);
 			return;
@@ -66,7 +79,17 @@ class UBSSentryWorldSubsystem : UScriptWorldSubsystem
 		TOptional<int> ExistingRowIndex = FindRowIndex(Sentry);
 		bool bRowCreated = !ExistingRowIndex.IsSet();
 		int RowIndex = bRowCreated ? CreateRow(Sentry) : ExistingRowIndex.Value;
-		ApplyBindings(RowIndex, ResolvedBindings, bRowCreated);
+
+		FBSSentryStatics ResolvedStatics;
+		if (!ResolveStatics(Sentry, ResolvedStatics))
+		{
+			RemoveSentry(Sentry);
+			return;
+		}
+
+		ApplyStatics(RowIndex, ResolvedStatics, bRowCreated);
+		SentryAssembly::Build(this, RowIndex, Sentry, Sentry.ModularComponent, Sentry.ModularView);
+		SentryAim::SeedRuntime(AimCache[RowIndex], TargetingRuntime[RowIndex]);
 	}
 
 	void RemoveSentry(ABSSentry Sentry)
@@ -86,13 +109,14 @@ class UBSSentryWorldSubsystem : UScriptWorldSubsystem
 		}
 
 		RowSentries.RemoveAt(LastRowIndex);
-		Bindings.RemoveAt(LastRowIndex);
+		Statics.RemoveAt(LastRowIndex);
+		AimCache.RemoveAt(LastRowIndex);
 		TargetingRuntime.RemoveAt(LastRowIndex);
 		CombatRuntime.RemoveAt(LastRowIndex);
 		PowerRuntime.RemoveAt(LastRowIndex);
 	}
 
-	private bool ResolveBindings(ABSSentry Sentry, FBSSentryBindings& OutBindings) const
+	private bool ResolveStatics(ABSSentry Sentry, FBSSentryStatics& OutStatics) const
 	{
 		if (Sentry == nullptr || Sentry.SentryView == nullptr || Sentry.ModularComponent == nullptr)
 		{
@@ -100,51 +124,54 @@ class UBSSentryWorldSubsystem : UScriptWorldSubsystem
 		}
 
 		UBSModularComponent ModularComponent = Sentry.ModularComponent;
-		OutBindings.Sentry = Sentry;
-		OutBindings.SentryView = Sentry.SentryView;
+		OutStatics.Sentry = Sentry;
+		OutStatics.SentryView = Sentry.SentryView;
 
 		for (UBSModuleDefinition Module : ModularComponent.InstalledModules)
 		{
 			check(Module != nullptr, "Module is nullptr");
 
-			if (OutBindings.Chassis == nullptr)
+			if (OutStatics.Chassis == nullptr)
 			{
-				OutBindings.Chassis = Cast<UBSChassisDefinition>(Module);
+				OutStatics.Chassis = Cast<UBSChassisDefinition>(Module);
 			}
-			if (OutBindings.PowerSupply == nullptr)
+			if (OutStatics.PowerSupply == nullptr)
 			{
-				OutBindings.PowerSupply = Cast<UBSPowerSupplyUnitDefinition>(Module);
+				OutStatics.PowerSupply = Cast<UBSPowerSupplyUnitDefinition>(Module);
 			}
-			if (OutBindings.Turret == nullptr)
+			if (OutStatics.Turret == nullptr)
 			{
-				OutBindings.Turret = Cast<UBSTurretDefinition>(Module);
+				OutStatics.Turret = Cast<UBSTurretDefinition>(Module);
 			}
-			if (OutBindings.Battery == nullptr)
+			if (OutStatics.Battery == nullptr)
 			{
-				OutBindings.Battery = Cast<UBSBatteryDefinition>(Module);
+				OutStatics.Battery = Cast<UBSBatteryDefinition>(Module);
 			}
 		}
 
-		return OutBindings.Chassis != nullptr;
+		return OutStatics.Chassis != nullptr;
 	}
 
 	private int CreateRow(ABSSentry Sentry)
 	{
 		int RowIndex = RowSentries.Num();
 		RowSentries.Add(Sentry);
-		Bindings.Add(FBSSentryBindings());
+		Statics.Add(FBSSentryStatics());
+		AimCache.Add(FBSSentryAimCache());
 		TargetingRuntime.Add(FBSSentryTargetingRuntime());
 		CombatRuntime.Add(FBSSentryCombatRuntime());
 		PowerRuntime.Add(FBSSentryPowerRuntime());
 		return RowIndex;
 	}
 
-	private void ApplyBindings(int RowIndex, const FBSSentryBindings& ResolvedBindings, bool bRowCreated)
+	private void ApplyStatics(int RowIndex, const FBSSentryStatics& ResolveStatics, bool bRowCreated)
 	{
-		bool bTurretChanged = bRowCreated || Bindings[RowIndex].Turret != ResolvedBindings.Turret;
-		bool bBatteryChanged = bRowCreated || Bindings[RowIndex].Battery != ResolvedBindings.Battery;
+		bool bTurretChanged = bRowCreated || Statics[RowIndex].Turret != ResolveStatics.Turret;
+		bool bBatteryChanged = bRowCreated || Statics[RowIndex].Battery != ResolveStatics.Battery;
 
-		Bindings[RowIndex] = ResolvedBindings;
+		Statics[RowIndex] = ResolveStatics;
+		AimCache[RowIndex] = FBSSentryAimCache();
+		SentryAim::ResetRuntime(TargetingRuntime[RowIndex]);
 
 		if (bTurretChanged)
 		{
@@ -153,20 +180,21 @@ class UBSSentryWorldSubsystem : UScriptWorldSubsystem
 
 		if (bBatteryChanged)
 		{
-			PowerBehavior::InitState(Bindings[RowIndex], PowerRuntime[RowIndex]);
+			PowerBehavior::InitState(Statics[RowIndex], PowerRuntime[RowIndex]);
 		}
 	}
 
 	private void MoveRow(int TargetRowIndex, int SourceRowIndex)
 	{
 		RowSentries[TargetRowIndex] = RowSentries[SourceRowIndex];
-		Bindings[TargetRowIndex] = Bindings[SourceRowIndex];
+		Statics[TargetRowIndex] = Statics[SourceRowIndex];
+		AimCache[TargetRowIndex] = AimCache[SourceRowIndex];
 		TargetingRuntime[TargetRowIndex] = TargetingRuntime[SourceRowIndex];
 		CombatRuntime[TargetRowIndex] = CombatRuntime[SourceRowIndex];
 		PowerRuntime[TargetRowIndex] = PowerRuntime[SourceRowIndex];
 	}
 
-	private TOptional<int> FindRowIndex(ABSSentry Sentry) const
+	TOptional<int> FindRowIndex(ABSSentry Sentry) const
 	{
 		for (int Index = 0; Index < RowSentries.Num(); Index++)
 		{
@@ -182,7 +210,8 @@ class UBSSentryWorldSubsystem : UScriptWorldSubsystem
 	private void ClearAllRows()
 	{
 		RowSentries.Empty();
-		Bindings.Empty();
+		Statics.Empty();
+		AimCache.Empty();
 		TargetingRuntime.Empty();
 		CombatRuntime.Empty();
 		PowerRuntime.Empty();

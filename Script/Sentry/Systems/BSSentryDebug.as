@@ -6,7 +6,7 @@ namespace SentryDebugF
 	const FConsoleVariable LogAssemblyCVar(f"BF.Sentry.LogAssembly", 0);
 	const FConsoleVariable ValidateAssembly(f"BF.Sentry.ValidateAssembly", 0);
 
-	void LogAssembled(ABSSentry Sentry, UBSSentryView Adapter, UBSModularView ModularView)
+	void LogAssembled(ABSSentry Sentry, const FBSSentryAimCache& AimCache, UBSModularView ModularView)
 	{
 		if (LogAssemblyCVar.Int == 0)
 		{
@@ -14,14 +14,23 @@ namespace SentryDebugF
 		}
 
 		FString BaseMeshName = Sentry.Base != nullptr && Sentry.Base.StaticMesh != nullptr ? Sentry.Base.StaticMesh.GetName().ToString() : "<none>";
-		FString Rotator0Name = Adapter.RotatorComponents.Num() > 0 && Adapter.RotatorComponents[0] != nullptr ? Adapter.RotatorComponents[0].GetName().ToString() : "<none>";
-		FString Rotator1Name = Adapter.RotatorComponents.Num() > 1 && Adapter.RotatorComponents[1] != nullptr ? Adapter.RotatorComponents[1].GetName().ToString() : "<none>";
-		FString MuzzleName = Adapter.MuzzleComponent != nullptr ? Adapter.MuzzleComponent.GetName().ToString() : "<none>";
+		FString Rotator0Name = AimCache.Rotator0Component != nullptr ? AimCache.Rotator0Component.GetName().ToString() : "<none>";
+		FString Rotator1Name = AimCache.Rotator1Component != nullptr ? AimCache.Rotator1Component.GetName().ToString() : "<none>";
+		FString MuzzleName = AimCache.MuzzleComponent != nullptr ? AimCache.MuzzleComponent.GetName().ToString() : "<none>";
+		int RotatorCount = 0;
+		if (AimCache.Rotator0Component != nullptr)
+		{
+			RotatorCount++;
+		}
+		if (AimCache.Rotator1Component != nullptr)
+		{
+			RotatorCount++;
+		}
 		int ActiveElementCount = ModularView != nullptr ? ModularView.ActiveModuleElements.Num() : 0;
-		LogAssembly(f"Assembly | Rebuild Complete Sentry='{Sentry.GetName()}' BaseMesh='{BaseMeshName}' RotatorCount={Adapter.RotatorComponents.Num()} Rotator0='{Rotator0Name}' Rotator1='{Rotator1Name}' Muzzle='{MuzzleName}' ActiveElements={ActiveElementCount}");
+		LogAssembly(f"Assembly | Rebuild Complete Sentry='{Sentry.GetName()}' BaseMesh='{BaseMeshName}' RotatorCount={RotatorCount} Rotator0='{Rotator0Name}' Rotator1='{Rotator1Name}' Muzzle='{MuzzleName}' ActiveElements={ActiveElementCount}");
 	}
 	
-	void ValidateNoGarbageComponents(UBSSentryView Adapter, UBSModularView ModularView, ABSSentry Sentry)
+	void ValidateNoGarbageComponents(UBSModularView ModularView, ABSSentry Sentry)
 	{
 		if (ModularView == nullptr)
 		{
@@ -98,9 +107,23 @@ namespace SentryDebugF
 		FString BaseMeshName = Sentry.Base != nullptr && Sentry.Base.StaticMesh != nullptr ? Sentry.Base.StaticMesh.GetName().ToString() : "None";
 		FString Header = f"Slots: {SlotCount} Modules: {Sentry.ModularComponent.InstalledModules.Num()} Base: {BaseMeshName}";
 		System::DrawDebugString(Sentry.ActorLocation + FVector(0, 0, 50), Header, nullptr, FLinearColor::White);
-		bool bHasRotator0 = Sentry.SentryView.RotatorComponents.Num() > 0 && Sentry.SentryView.RotatorComponents[0] != nullptr;
-		bool bHasRotator1 = Sentry.SentryView.RotatorComponents.Num() > 1 && Sentry.SentryView.RotatorComponents[1] != nullptr;
-		System::DrawDebugString(Sentry.ActorLocation + FVector(0, 0, 70), f"Rotators: {Sentry.SentryView.RotatorComponents.Num()} R0: {bHasRotator0} R1: {bHasRotator1} Muzzle: {Sentry.SentryView.MuzzleComponent != nullptr}", nullptr, FLinearColor::White);
+		UBSSentryWorldSubsystem SentrySubsystem = UBSSentryWorldSubsystem::Get();
+		bool bHasRotator0 = false;
+		bool bHasRotator1 = false;
+		bool bHasMuzzle = false;
+		int RotatorCount = 0;
+		if (SentrySubsystem != nullptr)
+		{
+			TOptional<int> RowIndex = SentrySubsystem.FindRowIndex(Sentry);
+			if (RowIndex.IsSet())
+			{
+				bHasRotator0 = SentrySubsystem.AimCache[RowIndex.Value].Rotator0Component != nullptr;
+				bHasRotator1 = SentrySubsystem.AimCache[RowIndex.Value].Rotator1Component != nullptr;
+				bHasMuzzle = SentrySubsystem.AimCache[RowIndex.Value].MuzzleComponent != nullptr;
+				RotatorCount = (bHasRotator0 ? 1 : 0) + (bHasRotator1 ? 1 : 0);
+			}
+		}
+		System::DrawDebugString(Sentry.ActorLocation + FVector(0, 0, 70), f"Rotators: {RotatorCount} R0: {bHasRotator0} R1: {bHasRotator1} Muzzle: {bHasMuzzle}", nullptr, FLinearColor::White);
 
 		for (int SlotIndex = 0; SlotIndex < SlotCount; SlotIndex++)
 		{
@@ -118,41 +141,31 @@ namespace SentryDebugF
 		}
 	}
 
-	void DrawAim(ABSSentry Sentry, FVector TargetLocation)
+	void DrawAim(ABSSentry Sentry, const FBSSentryTargetingRuntime& TargetingRuntime)
 	{
-		if (Sentry == nullptr || Sentry.SentryView == nullptr)
+		if (Sentry == nullptr || !TargetingRuntime.bHasMuzzleState)
 		{
 			return;
 		}
 
-		UBSSentryView Adapter = Sentry.SentryView;
-		if (Adapter.MuzzleComponent == nullptr || !Adapter.MuzzleComponent.DoesSocketExist(Sentry::MuzzleSocketName))
-		{
-			return;
-		}
-
-		FTransform MuzzleSocketWorld = Adapter.MuzzleComponent.GetSocketTransform(Sentry::MuzzleSocketName);
-		FVector MuzzleLocation = MuzzleSocketWorld.Location;
-		FVector ToTarget = TargetLocation - MuzzleLocation;
-		float DistanceToTarget = ToTarget.Size();
+		FVector MuzzleLocation = TargetingRuntime.MuzzleWorldLocation;
+		float DistanceToTarget = TargetingRuntime.DistanceToTarget;
 		if (DistanceToTarget <= 0.0f)
 		{
 			return;
 		}
 
-		FVector TargetDirection = ToTarget / DistanceToTarget;
-		FVector MuzzleForward = MuzzleSocketWorld.Rotation.ForwardVector.GetSafeNormal();
-		float AimDot = MuzzleForward.DotProduct(TargetDirection);
+		FVector MuzzleForward = TargetingRuntime.MuzzleWorldRotation.ForwardVector.GetSafeNormal();
 
-		System::DrawDebugLine(MuzzleLocation, TargetLocation, FLinearColor::Yellow, 0, 2);
+		System::DrawDebugLine(MuzzleLocation, TargetingRuntime.TargetLocation, FLinearColor::Yellow, 0, 2);
 		System::DrawDebugLine(MuzzleLocation, MuzzleLocation + MuzzleForward * DistanceToTarget, FLinearColor::Blue, 0, 2);
-		System::DrawDebugPoint(TargetLocation, 12.0f, FLinearColor::Yellow, 0, EDrawDebugSceneDepthPriorityGroup::Foreground);
-		System::DrawDebugString(MuzzleLocation + FVector(0, 0, 18), f"dot={AimDot}", nullptr, FLinearColor::White);
+		System::DrawDebugPoint(TargetingRuntime.TargetLocation, 12.0f, FLinearColor::Yellow, 0, EDrawDebugSceneDepthPriorityGroup::Foreground);
+		System::DrawDebugString(MuzzleLocation + FVector(0, 0, 18), f"dot={TargetingRuntime.AimDot}", nullptr, FLinearColor::White);
 	}
 
-	void LogAimState(ABSSentry Sentry, UBSSentryView Adapter, FVector TargetLocation, const FRotator& DesiredRotator0Local, const FRotator& AppliedRotator0Local, const FRotator& DesiredRotator1Local, const FRotator& AppliedRotator1Local)
+	void LogAimState(ABSSentry Sentry, const FBSSentryAimCache& AimCache, const FBSSentryTargetingRuntime& TargetingRuntime)
 	{
-		if (Sentry == nullptr || Adapter == nullptr)
+		if (Sentry == nullptr || !AimCache.bHasAimCache || !TargetingRuntime.bHasMuzzleState)
 		{
 			return;
 		}
@@ -162,39 +175,27 @@ namespace SentryDebugF
 			return;
 		}
 
-		if (Adapter.MuzzleComponent == nullptr || !Adapter.MuzzleComponent.DoesSocketExist(Sentry::MuzzleSocketName))
-		{
-			return;
-		}
-
-		FTransform MuzzleSocketWorld = Adapter.MuzzleComponent.GetSocketTransform(Sentry::MuzzleSocketName);
-		FVector MuzzleLocation = MuzzleSocketWorld.Location;
-		FVector ToTarget = TargetLocation - MuzzleLocation;
-		float DistanceToTarget = ToTarget.Size();
+		float DistanceToTarget = TargetingRuntime.DistanceToTarget;
 		if (DistanceToTarget <= 0.0f)
 		{
 			return;
 		}
 
-		FVector TargetDirection = ToTarget / DistanceToTarget;
-		FVector MuzzleForward = MuzzleSocketWorld.Rotation.ForwardVector.GetSafeNormal();
-		float AimDot = MuzzleForward.DotProduct(TargetDirection);
-		FRotator MuzzleError = (TargetDirection.Rotation() - MuzzleForward.Rotation()).GetNormalized();
-		FRotator MuzzleLocalRotation = Adapter.MuzzleLocalRotation.Rotator();
+		FRotator MuzzleLocalRotation = AimCache.MuzzleLocalRotation.Rotator();
 
 		Log(
 			f"SentryAim sentry='{Sentry.GetName()}' " +
-			f"fastPath={Adapter.bHasYawPitchFastPath} " +
-			f"dot={AimDot} dist={DistanceToTarget} " +
-			f"muzzleError=(pitch={MuzzleError.Pitch}, yaw={MuzzleError.Yaw}, roll={MuzzleError.Roll}) " +
-			f"muzzleOffset=(x={Adapter.MuzzleOffset.X}, y={Adapter.MuzzleOffset.Y}, z={Adapter.MuzzleOffset.Z}) " +
-			f"cachedYaw=(forward={Adapter.CachedYawForwardOffset}, lateral={Adapter.CachedYawLateralOffset}) " +
-			f"cachedPitch=(forward={Adapter.CachedPitchForwardOffset}, vertical={Adapter.CachedPitchVerticalOffset}) " +
+			f"fastPath={AimCache.bHasAimCache} " +
+			f"dot={TargetingRuntime.AimDot} dist={DistanceToTarget} " +
+			f"muzzleError=(pitch={TargetingRuntime.MuzzleError.Pitch}, yaw={TargetingRuntime.MuzzleError.Yaw}, roll={TargetingRuntime.MuzzleError.Roll}) " +
+			f"muzzleOffset=(x={AimCache.MuzzleOffsetLocal.X}, y={AimCache.MuzzleOffsetLocal.Y}, z={AimCache.MuzzleOffsetLocal.Z}) " +
+			f"cachedYaw=(forward={AimCache.CachedYawForwardOffset}, lateral={AimCache.CachedYawLateralOffset}) " +
+			f"cachedPitch=(forward={AimCache.CachedPitchForwardOffset}, vertical={AimCache.CachedPitchVerticalOffset}) " +
 			f"muzzleLocal=(pitch={MuzzleLocalRotation.Pitch}, yaw={MuzzleLocalRotation.Yaw}, roll={MuzzleLocalRotation.Roll}) " +
-			f"desiredR0=(pitch={DesiredRotator0Local.Pitch}, yaw={DesiredRotator0Local.Yaw}, roll={DesiredRotator0Local.Roll}) " +
-			f"appliedR0=(pitch={AppliedRotator0Local.Pitch}, yaw={AppliedRotator0Local.Yaw}, roll={AppliedRotator0Local.Roll}) " +
-			f"desiredR1=(pitch={DesiredRotator1Local.Pitch}, yaw={DesiredRotator1Local.Yaw}, roll={DesiredRotator1Local.Roll}) " +
-			f"appliedR1=(pitch={AppliedRotator1Local.Pitch}, yaw={AppliedRotator1Local.Yaw}, roll={AppliedRotator1Local.Roll})"
+			f"desiredR0=(pitch={TargetingRuntime.DesiredRotator0Local.Pitch}, yaw={TargetingRuntime.DesiredRotator0Local.Yaw}, roll={TargetingRuntime.DesiredRotator0Local.Roll}) " +
+			f"appliedR0=(pitch={TargetingRuntime.AppliedRotator0Local.Pitch}, yaw={TargetingRuntime.AppliedRotator0Local.Yaw}, roll={TargetingRuntime.AppliedRotator0Local.Roll}) " +
+			f"desiredR1=(pitch={TargetingRuntime.DesiredRotator1Local.Pitch}, yaw={TargetingRuntime.DesiredRotator1Local.Yaw}, roll={TargetingRuntime.DesiredRotator1Local.Roll}) " +
+			f"appliedR1=(pitch={TargetingRuntime.AppliedRotator1Local.Pitch}, yaw={TargetingRuntime.AppliedRotator1Local.Yaw}, roll={TargetingRuntime.AppliedRotator1Local.Roll})"
 		);
 	}
 }

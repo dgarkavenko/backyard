@@ -1,20 +1,5 @@
 class UBSSentryView : UActorComponent
 {
-	TArray<USceneComponent> RotatorComponents;
-	TArray<FBSSentryConstraint> RotatorConstraints;
-	TArray<FVector> RotatorOffsets;
-	USceneComponent MuzzleComponent;
-
-	bool bHasYawPitchFastPath = false;
-	FVector Rotator1OffsetLocal;
-	FVector MuzzleOffsetLocal;
-	FVector MuzzleOffset;
-	FQuat MuzzleLocalRotation;
-	float CachedYawLateralOffset = 0.0f;
-	float CachedYawForwardOffset = 0.0f;
-	float CachedPitchVerticalOffset = 0.0f;
-	float CachedPitchForwardOffset = 0.0f;
-
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()
 	{
@@ -55,13 +40,10 @@ class UBSSentryView : UActorComponent
 		check(ModularComponent != nullptr);
 		check(ModularView != nullptr);
 
-		SentryAssembly::Build(this, Sentry, ModularComponent, ModularView);
-	}
-
-	bool HasAimRig() const
-	{
-		return RotatorComponents.Num() >= 2
-			&& RotatorComponents[0] != nullptr
-			&& RotatorComponents[1] != nullptr;
+		UBSSentryWorldSubsystem SentrySubsystem = UBSSentryWorldSubsystem::Get();
+		if (SentrySubsystem != nullptr)
+		{
+			SentrySubsystem.SyncSentry(Sentry);
+		}
 	}
 }

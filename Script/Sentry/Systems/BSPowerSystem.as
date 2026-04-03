@@ -1,30 +1,30 @@
 namespace PowerBehavior
 {
-	void Update(const FBSSentryBindings& Bindings, FBSSentryPowerRuntime& PowerRuntime, float DeltaSeconds)
+	void Update(const FBSSentryStatics& Statics, FBSSentryPowerRuntime& PowerRuntime, float DeltaSeconds)
 	{
-		if (Bindings.PowerSupply == nullptr)
+		if (Statics.PowerSupply == nullptr)
 		{
 			PowerRuntime.State.AvailableWatts = 0.0f;
 			PowerRuntime.State.SupplyRatio = 0.0f;
 			return;
 		}
 
-		FindSource(Bindings, PowerRuntime.State);
+		FindSource(Statics, PowerRuntime.State);
 
 		float SourceWatts = 0.0f;
 		if (PowerRuntime.State.ConnectedSource != nullptr)
 		{
-			SourceWatts = PowerRuntime.State.ConnectedSource.DrawPower(Bindings.PowerSupply.MaxDraw, DeltaSeconds);
-			SourceWatts *= Bindings.PowerSupply.Efficiency;
+			SourceWatts = PowerRuntime.State.ConnectedSource.DrawPower(Statics.PowerSupply.MaxDraw, DeltaSeconds);
+			SourceWatts *= Statics.PowerSupply.Efficiency;
 		}
 
 		float BatteryWatts = 0.0f;
-		if (Bindings.Battery != nullptr && PowerRuntime.State.BatteryRemaining > 0.0f)
+		if (Statics.Battery != nullptr && PowerRuntime.State.BatteryRemaining > 0.0f)
 		{
-			float Shortfall = Bindings.PowerSupply.MaxDraw * Bindings.PowerSupply.Efficiency - SourceWatts;
+			float Shortfall = Statics.PowerSupply.MaxDraw * Statics.PowerSupply.Efficiency - SourceWatts;
 			if (Shortfall > 0.0f)
 			{
-				float MaxFromBattery = Math::Min(Shortfall, Bindings.Battery.MaxDischargeRate);
+				float MaxFromBattery = Math::Min(Shortfall, Statics.Battery.MaxDischargeRate);
 				float EnergyNeeded = MaxFromBattery * DeltaSeconds;
 				if (EnergyNeeded > PowerRuntime.State.BatteryRemaining)
 				{
@@ -52,7 +52,7 @@ namespace PowerBehavior
 		}
 	}
 
-	void InitState(const FBSSentryBindings& Bindings, FBSSentryPowerRuntime& PowerRuntime)
+	void InitState(const FBSSentryStatics& Bindings, FBSSentryPowerRuntime& PowerRuntime)
 	{
 		PowerRuntime.State = FBSPowerState();
 		if (Bindings.Battery != nullptr)
@@ -61,7 +61,7 @@ namespace PowerBehavior
 		}
 	}
 
-	void FindSource(const FBSSentryBindings& Bindings, FBSPowerState& State)
+	void FindSource(const FBSSentryStatics& Bindings, FBSPowerState& State)
 	{
 		if (State.ConnectedSource != nullptr)
 		{

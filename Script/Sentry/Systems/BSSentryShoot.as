@@ -1,13 +1,12 @@
 namespace SentryShoot
 {
-	void Update(const FBSSentryBindings& Bindings, FBSSentryTargetingRuntime& TargetingRuntime, FBSSentryCombatRuntime& CombatRuntime)
+	void Update(const FBSSentryStatics& Statics, const FBSSentryAimCache& AimCache, FBSSentryTargetingRuntime& TargetingRuntime, FBSSentryCombatRuntime& CombatRuntime)
 	{
-		ABSSentry Sentry = Bindings.Sentry;
-		UBSSentryView Adapter = Bindings.SentryView;
-		UBSTurretDefinition Turret = Bindings.Turret;
+		ABSSentry Sentry = Statics.Sentry;
+		UBSTurretDefinition Turret = Statics.Turret;
 		FVector TargetLocation = TargetingRuntime.TargetLocation;
 
-		if (Sentry == nullptr || Adapter == nullptr || Turret == nullptr)
+		if (Sentry == nullptr || Turret == nullptr)
 		{
 			return;
 		}
@@ -19,31 +18,26 @@ namespace SentryShoot
 
 		CombatRuntime.ShotCooldownRemaining = 60.0f / float(Turret.RPM);
 
-		if (Adapter.MuzzleComponent == nullptr || !Adapter.MuzzleComponent.DoesSocketExist(Sentry::MuzzleSocketName))
+		if (!TargetingRuntime.bHasMuzzleState)
 		{
 			return;
 		}
 
-		FTransform MuzzleSocketWorld = Adapter.MuzzleComponent.GetSocketTransform(Sentry::MuzzleSocketName);
-		FVector MuzzleLocation = MuzzleSocketWorld.Location;
+		FVector MuzzleLocation = TargetingRuntime.MuzzleWorldLocation;
 		FVector ToTarget = TargetLocation - MuzzleLocation;
-		float DistanceToTarget = ToTarget.Size();
+		float DistanceToTarget = TargetingRuntime.DistanceToTarget;
 		if (DistanceToTarget <= 0.0f || DistanceToTarget > Turret.ShootingRules.MaxDistance)
 		{
 			return;
 		}
 
-		FVector TargetDirection = ToTarget / DistanceToTarget;
-		FRotator CurrentRotation = MuzzleSocketWorld.Rotation.ForwardVector.Rotation();
-		FRotator DesiredRotation = TargetDirection.Rotation();
-		FRotator DeltaRotation = (DesiredRotation - CurrentRotation).GetNormalized();
-		float DeltaYaw = DeltaRotation.Yaw;
+		float DeltaYaw = TargetingRuntime.MuzzleError.Yaw;
 		if (DeltaYaw < 0.0f)
 		{
 			DeltaYaw = -DeltaYaw;
 		}
 
-		float DeltaPitch = DeltaRotation.Pitch;
+		float DeltaPitch = TargetingRuntime.MuzzleError.Pitch;
 		if (DeltaPitch < 0.0f)
 		{
 			DeltaPitch = -DeltaPitch;
@@ -55,17 +49,17 @@ namespace SentryShoot
 			return;
 		}
 
-		SpawnPrimaryProjectile(MuzzleLocation, MuzzleSocketWorld.Rotation.ForwardVector, Sentry);
+		SpawnPrimaryProjectile(MuzzleLocation, TargetingRuntime.MuzzleWorldRotation.ForwardVector, Sentry);
 
-		MuzzleLocation += Adapter.MuzzleComponent.WorldRotation.RotateVector(FVector(5,0,0)); 
+		MuzzleLocation += TargetingRuntime.MuzzleWorldRotation.RotateVector(FVector(5,0,0));
 
-		if (Turret.ShotEffect_NS.IsValid())
+		if (Turret.ShotEffect_NS.IsValid() && AimCache.MuzzleComponent != nullptr)
 		{
 			Niagara::SpawnSystemAttached(Turret.ShotEffect_NS.Get(),
-										 Adapter.MuzzleComponent,
+										 AimCache.MuzzleComponent,
 										 NAME_None,
 										 MuzzleLocation,
-										 Adapter.MuzzleComponent.WorldRotation,
+										 TargetingRuntime.MuzzleWorldRotation,
 										 EAttachLocation::KeepWorldPosition,
 										 true,
 										 true,
@@ -77,7 +71,7 @@ namespace SentryShoot
 			const FNiagaraDataChannelSearchParameters SearchParameters;
 			UNiagaraDataChannelWriter Writer = NiagaraDataChannel::WriteToNiagaraDataChannel(Turret.ShotEffect_NDC.Get(), SearchParameters, 1, false, true, true, "Fire NDC Write");
 			Writer.WritePosition(n"Location", 0, MuzzleLocation);
-			Writer.WriteQuat(n"Rotation", 0, Adapter.MuzzleComponent.WorldRotation.Quaternion());
+			Writer.WriteQuat(n"Rotation", 0, TargetingRuntime.MuzzleWorldRotation.Quaternion());
 		}
 	}
 

@@ -1,8 +1,13 @@
 namespace SentryAssembly
 {
-	void Build(UBSSentryView Adapter, ABSSentry Sentry, UBSModularComponent ModularComponent, UBSModularView ModularView)
+	void Build(UBSSentryWorldSubsystem SentrySubsystem, int RowIndex, ABSSentry Sentry, UBSModularComponent ModularComponent, UBSModularView ModularView)
 	{
-		BeginRebuild(Adapter);
+		if (SentrySubsystem == nullptr || RowIndex < 0 || RowIndex >= SentrySubsystem.AimCache.Num())
+		{
+			return;
+		}
+
+		BeginRebuild(SentrySubsystem, RowIndex);
 		SentryDebugF::LogAssembly(f"Assembly: cache sentry='{Sentry.GetName()}' modules={ModularComponent.InstalledModules.Num()}");
 
 		for (int SlotIndex = 0; SlotIndex < ModularComponent.Slots.Num(); SlotIndex++)
@@ -19,85 +24,73 @@ namespace SentryAssembly
 				continue;
 			}
 
-			CacheChassis(ChassisDefinition, ModularView.LastBuildResult.InstalledModuleViews[SlotIndex], Adapter);
+			CacheChassis(ChassisDefinition, ModularView.LastBuildResult.InstalledModuleViews[SlotIndex], SentrySubsystem, RowIndex);
 		}
 
-		CacheGeometry(Adapter, Sentry);
-
-		UBSSentryWorldSubsystem SentrySubsystem = UBSSentryWorldSubsystem::Get();
-		if (SentrySubsystem != nullptr)
-		{
-			SentrySubsystem.SyncSentry(Sentry);
-		}
-
-		SentryDebugF::LogAssembled(Sentry, Adapter, ModularView);
-		SentryDebugF::ValidateNoGarbageComponents(Adapter, ModularView, Sentry);
+		CacheGeometry(SentrySubsystem, RowIndex, Sentry);
+		SentryDebugF::LogAssembled(Sentry, SentrySubsystem.AimCache[RowIndex], ModularView);
+		SentryDebugF::ValidateNoGarbageComponents(ModularView, Sentry);
 	}
 
-	void BeginRebuild(UBSSentryView Adapter)
+	void BeginRebuild(UBSSentryWorldSubsystem SentrySubsystem, int RowIndex)
 	{
-		Adapter.RotatorComponents.Empty();
-		Adapter.RotatorConstraints.Empty();
-		Adapter.RotatorOffsets.Empty();
-		Adapter.MuzzleComponent = nullptr;
-		Adapter.bHasYawPitchFastPath = false;
-		Adapter.Rotator1OffsetLocal = FVector::ZeroVector;
-		Adapter.MuzzleOffsetLocal = FVector::ZeroVector;
-		Adapter.MuzzleOffset = FVector::ZeroVector;
-		Adapter.MuzzleLocalRotation = FQuat::Identity;
-		Adapter.CachedYawLateralOffset = 0.0f;
-		Adapter.CachedYawForwardOffset = 0.0f;
-		Adapter.CachedPitchVerticalOffset = 0.0f;
-		Adapter.CachedPitchForwardOffset = 0.0f;
+		SentrySubsystem.AimCache[RowIndex] = FBSSentryAimCache();
 	}
 
-	void CacheChassis(UBSChassisDefinition Definition, const FBSBuiltModuleView& BuiltView, UBSSentryView Adapter)
+	void CacheChassis(UBSChassisDefinition Definition, const FBSBuiltModuleView& BuiltView, UBSSentryWorldSubsystem SentrySubsystem, int RowIndex)
 	{
 		for (int RotatorIndex = 0; RotatorIndex < Definition.Rotators.Num(); RotatorIndex++)
 		{
 			const FBSChassisRotatorSpec& RotatorSpec = Definition.Rotators[RotatorIndex];
 			USceneComponent ResolvedRotator = ModularAssembly::FindBuiltElementById(BuiltView, RotatorSpec.ElementId);
-			if (ResolvedRotator != nullptr)
+			if (ResolvedRotator == nullptr)
 			{
-				Adapter.RotatorComponents.Add(ResolvedRotator);
-				Adapter.RotatorConstraints.Add(RotatorSpec.Constraint);
+				Warning(f"SentryAssembly could not resolve rotator[{RotatorIndex}] '{RotatorSpec.ElementId}' on chassis '{Definition.GetName()}'");
+				continue;
+			}
+
+			if (SentrySubsystem.AimCache[RowIndex].Rotator0Component == nullptr)
+			{
+				SentrySubsystem.AimCache[RowIndex].Rotator0Component = ResolvedRotator;
+				SentrySubsystem.AimCache[RowIndex].Rotator0Constraint = RotatorSpec.Constraint;
+			}
+			else if (SentrySubsystem.AimCache[RowIndex].Rotator1Component == nullptr)
+			{
+				SentrySubsystem.AimCache[RowIndex].Rotator1Component = ResolvedRotator;
+				SentrySubsystem.AimCache[RowIndex].Rotator1Constraint = RotatorSpec.Constraint;
 			}
 			else
 			{
-				Warning(f"SentryAssembly could not resolve rotator[{RotatorIndex}] '{RotatorSpec.ElementId}' on chassis '{Definition.GetName()}'");
+				Warning(f"SentryAssembly ignores extra rotator[{RotatorIndex}] '{RotatorSpec.ElementId}' on chassis '{Definition.GetName()}'");
 			}
 		}
 	}
 
-	void CacheGeometry(UBSSentryView Adapter, ABSSentry Sentry)
+	void CacheGeometry(UBSSentryWorldSubsystem SentrySubsystem, int RowIndex, ABSSentry Sentry)
 	{
-		Adapter.RotatorOffsets.Empty();
-		Adapter.RotatorOffsets.SetNum(Adapter.RotatorComponents.Num());
-		Adapter.bHasYawPitchFastPath = false;
-		Adapter.Rotator1OffsetLocal = FVector::ZeroVector;
-		Adapter.MuzzleOffsetLocal = FVector::ZeroVector;
-		Adapter.MuzzleOffset = FVector::ZeroVector;
-		Adapter.MuzzleLocalRotation = FQuat::Identity;
-		Adapter.CachedYawLateralOffset = 0.0f;
-		Adapter.CachedYawForwardOffset = 0.0f;
-		Adapter.CachedPitchVerticalOffset = 0.0f;
-		Adapter.CachedPitchForwardOffset = 0.0f;
-
-		if (Adapter.RotatorComponents.Num() < 2 || Adapter.RotatorComponents[0] == nullptr || Adapter.RotatorComponents[1] == nullptr)
+		FBSSentryAimCache Cache = SentrySubsystem.AimCache[RowIndex];
+		if (Sentry == nullptr || Sentry.Base == nullptr)
 		{
-			FString Rotator0Name = Adapter.RotatorComponents.Num() > 0 && Adapter.RotatorComponents[0] != nullptr ? Adapter.RotatorComponents[0].GetName().ToString() : "<none>";
-			FString Rotator1Name = Adapter.RotatorComponents.Num() > 1 && Adapter.RotatorComponents[1] != nullptr ? Adapter.RotatorComponents[1].GetName().ToString() : "<none>";
-			SentryDebugF::LogAssembly(f"Assembly: missing rotator chain sentry='{Sentry.GetName()}' rotatorCount={Adapter.RotatorComponents.Num()} rotator0='{Rotator0Name}' rotator1='{Rotator1Name}'");
 			return;
 		}
 
-		USceneComponent Rotator0 = Adapter.RotatorComponents[0];
-		USceneComponent Rotator1 = Adapter.RotatorComponents[1];
-		Adapter.RotatorOffsets[0] = Sentry.Base.WorldTransform.InverseTransformPosition(Rotator0.WorldLocation);
-		Adapter.RotatorOffsets[1] = Rotator0.WorldTransform.InverseTransformPosition(Rotator1.WorldLocation);
-		Adapter.Rotator1OffsetLocal = Adapter.RotatorOffsets[1];
+		USceneComponent Rotator0 = Cache.Rotator0Component;
+		USceneComponent Rotator1 = Cache.Rotator1Component;
+		if (Rotator0 == nullptr || Rotator1 == nullptr)
+		{
+			FString Rotator0Name = Rotator0 != nullptr ? Rotator0.GetName().ToString() : "<none>";
+			FString Rotator1Name = Rotator1 != nullptr ? Rotator1.GetName().ToString() : "<none>";
+			SentryDebugF::LogAssembly(f"Assembly: missing rotator chain sentry='{Sentry.GetName()}' rotator0='{Rotator0Name}' rotator1='{Rotator1Name}'");
+			SentrySubsystem.AimCache[RowIndex] = FBSSentryAimCache();
+			return;
+		}
 
-		if (Adapter.MuzzleComponent == nullptr)
+		Cache.BaseWorldTransform = Sentry.Base.WorldTransform;
+		Cache.BaseWorldRotation = Sentry.Base.WorldRotation.Quaternion();
+		Cache.Rotator0OffsetLocal = Sentry.Base.WorldTransform.InverseTransformPosition(Rotator0.WorldLocation);
+		Cache.Rotator1OffsetLocal = Rotator0.WorldTransform.InverseTransformPosition(Rotator1.WorldLocation);
+
+		if (Cache.MuzzleComponent == nullptr)
 		{
 			TArray<USceneComponent> AllChildren;
 			Rotator1.GetChildrenComponents(true, AllChildren);
@@ -106,39 +99,41 @@ namespace SentryAssembly
 			{
 				if (Child.DoesSocketExist(Sentry::MuzzleSocketName))
 				{
-					Adapter.MuzzleComponent = Child;
+					Cache.MuzzleComponent = Child;
 					break;
 				}
 			}
 		}
 
-		if (Adapter.MuzzleComponent != nullptr && Adapter.MuzzleComponent.DoesSocketExist(Sentry::MuzzleSocketName))
+		if (Cache.MuzzleComponent == nullptr || !Cache.MuzzleComponent.DoesSocketExist(Sentry::MuzzleSocketName))
 		{
-			FTransform MuzzleSocketWorld = Adapter.MuzzleComponent.GetSocketTransform(Sentry::MuzzleSocketName);
-			Adapter.MuzzleOffset = Rotator1.WorldTransform.InverseTransformPosition(MuzzleSocketWorld.Location);
-			Adapter.MuzzleOffsetLocal = Adapter.MuzzleOffset;
-			Adapter.MuzzleLocalRotation = Rotator1.WorldRotation.Quaternion().Inverse() * MuzzleSocketWorld.Rotation;
-
-			if (HasYawPitchFastPath(Adapter))
-			{
-				Adapter.bHasYawPitchFastPath = true;
-				Adapter.CachedYawLateralOffset = Adapter.Rotator1OffsetLocal.Y + Adapter.MuzzleOffsetLocal.Y;
-				Adapter.CachedYawForwardOffset = Adapter.Rotator1OffsetLocal.X + Adapter.MuzzleOffsetLocal.X;
-				Adapter.CachedPitchVerticalOffset = Adapter.MuzzleOffsetLocal.Z;
-				Adapter.CachedPitchForwardOffset = Adapter.MuzzleOffsetLocal.X;
-			}
+			SentryDebugF::LogAssembly(f"Assembly: missing muzzle sentry='{Sentry.GetName()}'");
+			SentrySubsystem.AimCache[RowIndex] = FBSSentryAimCache();
+			return;
 		}
+
+		FTransform MuzzleSocketWorld = Cache.MuzzleComponent.GetSocketTransform(Sentry::MuzzleSocketName);
+		Cache.MuzzleOffsetLocal = Rotator1.WorldTransform.InverseTransformPosition(MuzzleSocketWorld.Location);
+		Cache.MuzzleLocalRotation = Rotator1.WorldRotation.Quaternion().Inverse() * MuzzleSocketWorld.Rotation;
+		if (!HasYawPitchFastPath(Cache))
+		{
+			SentryDebugF::LogAssembly(f"Assembly: invalid yaw/pitch fast path sentry='{Sentry.GetName()}'");
+			SentrySubsystem.AimCache[RowIndex] = FBSSentryAimCache();
+			return;
+		}
+
+		Cache.bHasAimCache = true;
+		Cache.CachedYawLateralOffset = Cache.Rotator1OffsetLocal.Y + Cache.MuzzleOffsetLocal.Y;
+		Cache.CachedYawForwardOffset = Cache.Rotator1OffsetLocal.X + Cache.MuzzleOffsetLocal.X;
+		Cache.CachedPitchVerticalOffset = Cache.MuzzleOffsetLocal.Z;
+		Cache.CachedPitchForwardOffset = Cache.MuzzleOffsetLocal.X;
+		SentrySubsystem.AimCache[RowIndex] = Cache;
 	}
 
-	bool HasYawPitchFastPath(UBSSentryView Adapter)
+	bool HasYawPitchFastPath(const FBSSentryAimCache& Cache)
 	{
-		if (Adapter == nullptr || Adapter.RotatorConstraints.Num() < 2)
-		{
-			return false;
-		}
-
-		const FBSSentryConstraint& Rotator0Constraint = Adapter.RotatorConstraints[0];
-		const FBSSentryConstraint& Rotator1Constraint = Adapter.RotatorConstraints[1];
+		const FBSSentryConstraint& Rotator0Constraint = Cache.Rotator0Constraint;
+		const FBSSentryConstraint& Rotator1Constraint = Cache.Rotator1Constraint;
 		if (!Rotator0Constraint.bYaw || Rotator0Constraint.bPitch || Rotator0Constraint.bRoll)
 		{
 			return false;
@@ -149,7 +144,7 @@ namespace SentryAssembly
 			return false;
 		}
 
-		FRotator MuzzleLocal = Adapter.MuzzleLocalRotation.Rotator().GetNormalized();
+		FRotator MuzzleLocal = Cache.MuzzleLocalRotation.Rotator().GetNormalized();
 		return Math::Abs(MuzzleLocal.Yaw) < 0.1f
 			&& Math::Abs(MuzzleLocal.Pitch) < 0.1f;
 	}
