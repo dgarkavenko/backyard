@@ -3,7 +3,7 @@ namespace SentryAim
 	void Update(const FBSSentryBindings& Bindings, FBSSentryTargetingRuntime& TargetingRuntime, float DeltaSeconds)
 	{
 		ABSSentry Sentry = Bindings.Sentry;
-		UBSSentryView Adapter = Bindings.VisualAdapter;
+		UBSSentryView Adapter = Bindings.SentryView;
 		FVector TargetLocation = TargetingRuntime.TargetLocation;
 
 		if (Adapter == nullptr)

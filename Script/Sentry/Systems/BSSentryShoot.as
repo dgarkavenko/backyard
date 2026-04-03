@@ -3,7 +3,7 @@ namespace SentryShoot
 	void Update(const FBSSentryBindings& Bindings, FBSSentryTargetingRuntime& TargetingRuntime, FBSSentryCombatRuntime& CombatRuntime)
 	{
 		ABSSentry Sentry = Bindings.Sentry;
-		UBSSentryView Adapter = Bindings.VisualAdapter;
+		UBSSentryView Adapter = Bindings.SentryView;
 		UBSTurretDefinition Turret = Bindings.Turret;
 		FVector TargetLocation = TargetingRuntime.TargetLocation;
 

@@ -11,7 +11,7 @@ struct FBSPowerState
 struct FBSSentryBindings
 {
 	ABSSentry Sentry;
-	UBSSentryView VisualAdapter;
+	UBSSentryView SentryView;
 	UBSChassisDefinition Chassis;
 	UBSTurretDefinition Turret;
 	UBSPowerSupplyUnitDefinition PowerSupply;

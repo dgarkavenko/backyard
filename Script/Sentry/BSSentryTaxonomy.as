@@ -1,14 +1,14 @@
 class UBSModuleTaxonomy : UBFNativeModuleTaxonomy
 {
-	TArray<UBFModuleDefinition> GetAllModules() const
+	TArray<UBSModuleDefinition> GetAllModules() const
 	{
-		TArray<UBFModuleDefinition> Result;
+		TArray<UBSModuleDefinition> Result;
 		TArray<FPrimaryAssetId> Keys;
 		Modules.GetKeys(Keys);
 
 		for (FPrimaryAssetId Key : Keys)
 		{
-			UBFModuleDefinition Module = Cast<UBFModuleDefinition>(Modules[Key]);
+			UBSModuleDefinition Module = Cast<UBSModuleDefinition>(Modules[Key].Get());
 			if (Module != nullptr)
 			{
 				Result.Add(Module);

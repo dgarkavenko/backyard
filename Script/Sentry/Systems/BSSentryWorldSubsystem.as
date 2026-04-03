@@ -22,7 +22,7 @@ class UBSSentryWorldSubsystem : UScriptWorldSubsystem
 		for (int Index = 0; Index < RowSentries.Num(); Index++)
 		{
 			check(Bindings[Index].Sentry != nullptr);
-			check(Bindings[Index].VisualAdapter != nullptr);
+			check(Bindings[Index].SentryView != nullptr);
 			check(Bindings[Index].Chassis != nullptr);
 		}
 
@@ -94,16 +94,16 @@ class UBSSentryWorldSubsystem : UScriptWorldSubsystem
 
 	private bool ResolveBindings(ABSSentry Sentry, FBSSentryBindings& OutBindings) const
 	{
-		if (Sentry == nullptr || Sentry.VisualAdapter == nullptr || Sentry.ModularComponent == nullptr)
+		if (Sentry == nullptr || Sentry.SentryView == nullptr || Sentry.ModularComponent == nullptr)
 		{
 			return false;
 		}
 
 		UBSModularComponent ModularComponent = Sentry.ModularComponent;
 		OutBindings.Sentry = Sentry;
-		OutBindings.VisualAdapter = Sentry.VisualAdapter;
+		OutBindings.SentryView = Sentry.SentryView;
 
-		for (UBFModuleDefinition Module : ModularComponent.InstalledModules)
+		for (UBSModuleDefinition Module : ModularComponent.InstalledModules)
 		{
 			check(Module != nullptr, "Module is nullptr");
 

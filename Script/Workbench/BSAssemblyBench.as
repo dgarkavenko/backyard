@@ -27,14 +27,14 @@ class ABSAssemblyBench : AActor
 	UPROPERTY(EditAnywhere, Category = "Workbench|Snap", meta = (ClampMin = "10", ClampMax = "300", Units = "cm"))
 	float SnapZoneRadius = 75.0f;
 
-	TArray<UBFModuleDefinition> GetAvailableModules() const
+	TArray<UBSModuleDefinition> GetAvailableModules() const
 	{
 		UBSModuleTaxonomy Taxonomy = UBSModuleTaxonomy::Get();
 		if (Taxonomy != nullptr)
 		{
 			return Taxonomy.GetAllModules();
 		}
-		return TArray<UBFModuleDefinition>();
+		return TArray<UBSModuleDefinition>();
 	}
 
 	ABSSentry Sentry;
@@ -139,7 +139,7 @@ class ABSAssemblyBench : AActor
 		CameraViewpoint.Deactivate();
 	}
 
-	// ── Sentry State ──
+	// Sentry State
 
 	bool HasSentry() const
 	{
@@ -174,9 +174,9 @@ class ABSAssemblyBench : AActor
 			Sentry.Material = SentryMaterial;
 		}
 
-		if (Sentry.VisualAdapter != nullptr)
+		if (Sentry.ModularView != nullptr)
 		{
-			Sentry.VisualAdapter.RebuildFromCurrentModules();
+			Sentry.ModularView.MaterialOverride = Sentry.Material;
 		}
 	}
 
@@ -214,7 +214,7 @@ class ABSAssemblyBench : AActor
 		MountSentry(NewSentry);
 	}
 
-	// ── Snap Zone ──
+	// Snap Zone
 
 	UFUNCTION()
 	void OnSnapZoneBeginOverlap(

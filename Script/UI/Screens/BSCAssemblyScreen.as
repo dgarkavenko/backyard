@@ -161,7 +161,7 @@ class UBSAssemblyScreen : UBSMMScreen
 				SlotLabel = f"Slot {Index}";
 			}
 
-			UBFModuleDefinition InstalledModule = ModularComponent.Slots[Index].Content.IsSet() ? ModularComponent.Slots[Index].GetDefinitionUnsafe(ModularComponent) : nullptr;
+			UBSModuleDefinition InstalledModule = ModularComponent.Slots[Index].Content.IsSet() ? ModularComponent.Slots[Index].GetDefinitionUnsafe(ModularComponent) : nullptr;
 			bool bIsSelected = (SelectedSlotIndex == Index);
 
 			if (InstalledModule != nullptr)
@@ -219,11 +219,11 @@ class UBSAssemblyScreen : UBSMMScreen
 
 		SyncSelectedSlot(ModularComponent);
 
-		TArray<UBFModuleDefinition> AllModules = OwningWorkbench.GetAvailableModules();
+		TArray<UBSModuleDefinition> AllModules = OwningWorkbench.GetAvailableModules();
 
 		for (int Index = 0; Index < AllModules.Num(); Index++)
 		{
-			UBFModuleDefinition Module = AllModules[Index];
+			UBSModuleDefinition Module = AllModules[Index];
 			if (Module == nullptr)
 			{
 				continue;

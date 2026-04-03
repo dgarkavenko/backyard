@@ -6,7 +6,7 @@ namespace SentryDebugF
 	const FConsoleVariable LogAssemblyCVar(f"BF.Sentry.LogAssembly", 0);
 	const FConsoleVariable ValidateAssembly(f"BF.Sentry.ValidateAssembly", 0);
 
-	void LogAssembled(ABSSentry Sentry, UBSSentryView Adapter)
+	void LogAssembled(ABSSentry Sentry, UBSSentryView Adapter, UBSModularView ModularView)
 	{
 		if (LogAssemblyCVar.Int == 0)
 		{
@@ -17,12 +17,18 @@ namespace SentryDebugF
 		FString Rotator0Name = Adapter.RotatorComponents.Num() > 0 && Adapter.RotatorComponents[0] != nullptr ? Adapter.RotatorComponents[0].GetName().ToString() : "<none>";
 		FString Rotator1Name = Adapter.RotatorComponents.Num() > 1 && Adapter.RotatorComponents[1] != nullptr ? Adapter.RotatorComponents[1].GetName().ToString() : "<none>";
 		FString MuzzleName = Adapter.MuzzleComponent != nullptr ? Adapter.MuzzleComponent.GetName().ToString() : "<none>";
-		LogAssembly(f"Assembly | Rebuild Complete Sentry='{Sentry.GetName()}' BaseMesh='{BaseMeshName}' RotatorCount={Adapter.RotatorComponents.Num()} Rotator0='{Rotator0Name}' Rotator1='{Rotator1Name}' Muzzle='{MuzzleName}' ActiveElements={Adapter.ActiveModuleElements.Num()}");
+		int ActiveElementCount = ModularView != nullptr ? ModularView.ActiveModuleElements.Num() : 0;
+		LogAssembly(f"Assembly | Rebuild Complete Sentry='{Sentry.GetName()}' BaseMesh='{BaseMeshName}' RotatorCount={Adapter.RotatorComponents.Num()} Rotator0='{Rotator0Name}' Rotator1='{Rotator1Name}' Muzzle='{MuzzleName}' ActiveElements={ActiveElementCount}");
 	}
 	
-	void ValidateNoGarbageComponents(UBSSentryView Adapter, ABSSentry Sentry)
+	void ValidateNoGarbageComponents(UBSSentryView Adapter, UBSModularView ModularView, ABSSentry Sentry)
 	{
-		ValidatePoolState(Adapter.ModuleElementPool, Adapter.ActiveModuleElements);
+		if (ModularView == nullptr)
+		{
+			return;
+		}
+
+		ValidatePoolState(ModularView.ModuleElementPool, ModularView.ActiveModuleElements);
 
 		TArray<USceneComponent> AttachedComponents;
 		Sentry.Base.GetChildrenComponents(true, AttachedComponents);
@@ -35,7 +41,7 @@ namespace SentryDebugF
 				continue;
 			}
 
-			if (!IsManagedDynamicComponent(Adapter, MeshComponent))
+			if (!IsManagedDynamicComponent(ModularView, MeshComponent))
 			{
 				FString Name = MeshComponent.GetName().ToString();
 				if (Name.Contains("ModulePool_"))
@@ -46,9 +52,9 @@ namespace SentryDebugF
 		}
 	}	
 
-	bool IsManagedDynamicComponent(UBSSentryView Adapter, UStaticMeshComponent Component)
+	bool IsManagedDynamicComponent(UBSModularView ModularView, UStaticMeshComponent Component)
 	{
-		return Adapter.ModuleElementPool.Contains(Component);
+		return ModularView != nullptr && ModularView.ModuleElementPool.Contains(Component);
 	}
 
 	void ValidatePoolState(const TArray<UStaticMeshComponent>& Pool, const TArray<UStaticMeshComponent>& ActivePool)
@@ -83,7 +89,7 @@ namespace SentryDebugF
 
 	void DrawSockets(ABSSentry Sentry)
 	{
-		if (Sentry == nullptr || Sentry.ModularComponent == nullptr || Sentry.VisualAdapter == nullptr)
+		if (Sentry == nullptr || Sentry.ModularComponent == nullptr || Sentry.ModularView == nullptr || Sentry.SentryView == nullptr)
 		{
 			return;
 		}
@@ -92,9 +98,9 @@ namespace SentryDebugF
 		FString BaseMeshName = Sentry.Base != nullptr && Sentry.Base.StaticMesh != nullptr ? Sentry.Base.StaticMesh.GetName().ToString() : "None";
 		FString Header = f"Slots: {SlotCount} Modules: {Sentry.ModularComponent.InstalledModules.Num()} Base: {BaseMeshName}";
 		System::DrawDebugString(Sentry.ActorLocation + FVector(0, 0, 50), Header, nullptr, FLinearColor::White);
-		bool bHasRotator0 = Sentry.VisualAdapter.RotatorComponents.Num() > 0 && Sentry.VisualAdapter.RotatorComponents[0] != nullptr;
-		bool bHasRotator1 = Sentry.VisualAdapter.RotatorComponents.Num() > 1 && Sentry.VisualAdapter.RotatorComponents[1] != nullptr;
-		System::DrawDebugString(Sentry.ActorLocation + FVector(0, 0, 70), f"Rotators: {Sentry.VisualAdapter.RotatorComponents.Num()} R0: {bHasRotator0} R1: {bHasRotator1} Muzzle: {Sentry.VisualAdapter.MuzzleComponent != nullptr}", nullptr, FLinearColor::White);
+		bool bHasRotator0 = Sentry.SentryView.RotatorComponents.Num() > 0 && Sentry.SentryView.RotatorComponents[0] != nullptr;
+		bool bHasRotator1 = Sentry.SentryView.RotatorComponents.Num() > 1 && Sentry.SentryView.RotatorComponents[1] != nullptr;
+		System::DrawDebugString(Sentry.ActorLocation + FVector(0, 0, 70), f"Rotators: {Sentry.SentryView.RotatorComponents.Num()} R0: {bHasRotator0} R1: {bHasRotator1} Muzzle: {Sentry.SentryView.MuzzleComponent != nullptr}", nullptr, FLinearColor::White);
 
 		for (int SlotIndex = 0; SlotIndex < SlotCount; SlotIndex++)
 		{
@@ -109,34 +115,17 @@ namespace SentryDebugF
 				System::DrawDebugString(FallbackLocation, f"[{SlotIndex}] NO SOCKET", nullptr, FLinearColor::Red);
 				continue;
 			}
-
-			USceneComponent SocketOwner = SentryAssembly::FindSocketOwner(Sentry.VisualAdapter, Sentry, ModuleSlot.Socket);
-			if (SocketOwner == nullptr)
-			{
-				USceneComponent DefaultAttachParent = Sentry.VisualAdapter.GetDefaultAttachParent(Sentry);
-				FVector VirtualLocation = DefaultAttachParent != nullptr
-					? DefaultAttachParent.WorldLocation + FVector(0, 0, 10 + SlotIndex * 10)
-					: Sentry.ActorLocation + FVector(0, 0, 10 + SlotIndex * 10);
-				FLinearColor CyanColor = FLinearColor(0.0f, 0.8f, 0.8f);
-				System::DrawDebugPoint(VirtualLocation, 8.0f, CyanColor, 0, EDrawDebugSceneDepthPriorityGroup::Foreground);
-				System::DrawDebugString(VirtualLocation, f"[{SlotIndex}] {Label} (virtual)", nullptr, CyanColor);
-				continue;
-			}
-
-			FVector SocketLocation = SocketOwner.GetSocketLocation(ModuleSlot.Socket);
-			System::DrawDebugPoint(SocketLocation, 12.0f, PointColor, 0, EDrawDebugSceneDepthPriorityGroup::Foreground);
-			System::DrawDebugString(SocketLocation, f"[{SlotIndex}] {Label}", nullptr, PointColor);
 		}
 	}
 
 	void DrawAim(ABSSentry Sentry, FVector TargetLocation)
 	{
-		if (Sentry == nullptr || Sentry.VisualAdapter == nullptr)
+		if (Sentry == nullptr || Sentry.SentryView == nullptr)
 		{
 			return;
 		}
 
-		UBSSentryView Adapter = Sentry.VisualAdapter;
+		UBSSentryView Adapter = Sentry.SentryView;
 		if (Adapter.MuzzleComponent == nullptr || !Adapter.MuzzleComponent.DoesSocketExist(Sentry::MuzzleSocketName))
 		{
 			return;

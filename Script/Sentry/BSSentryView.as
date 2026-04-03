@@ -1,12 +1,5 @@
 class UBSSentryView : UActorComponent
 {
-	TArray<UStaticMeshComponent> ModuleElementPool;
-	TArray<int> ModuleElementGenerations;
-	TArray<UStaticMeshComponent> ActiveModuleElements;
-	int RebuildGeneration = 0;
-
-	TMap<FName, USceneComponent> SocketOwnerCache;
-
 	TArray<USceneComponent> RotatorComponents;
 	TArray<FBSSentryConstraint> RotatorConstraints;
 	TArray<FVector> RotatorOffsets;
@@ -28,10 +21,8 @@ class UBSSentryView : UActorComponent
 		UBSModularComponent ModularComponent = UBSModularComponent::Get(Owner);
 		if (ModularComponent != nullptr)
 		{
-			ModularComponent.OnCompositionChanged.AddUFunction(this, n"OnCompositionChanged");
+			ModularComponent.OnViewBuilt.AddUFunction(this, n"OnViewBuilt");
 		}
-
-		RebuildFromCurrentModules();
 	}
 
 	UFUNCTION(BlueprintOverride)
@@ -40,7 +31,7 @@ class UBSSentryView : UActorComponent
 		UBSModularComponent ModularComponent = UBSModularComponent::Get(Owner);
 		if (ModularComponent != nullptr)
 		{
-			ModularComponent.OnCompositionChanged.UnbindObject(this);
+			ModularComponent.OnViewBuilt.UnbindObject(this);
 		}
 
 		ABSSentry Sentry = Cast<ABSSentry>(Owner);
@@ -57,21 +48,14 @@ class UBSSentryView : UActorComponent
 	}
 
 	UFUNCTION()
-	void OnCompositionChanged(UBSModularComponent ModularComponent)
-	{
-		RebuildFromCurrentModules();
-	}
-
-	void RebuildFromCurrentModules()
+	void OnViewBuilt(UBSModularComponent ModularComponent, UBSModularView ModularView)
 	{
 		ABSSentry Sentry = Cast<ABSSentry>(Owner);
-		UBSModularComponent ModularComponent = UBSModularComponent::Get(Owner);
-		if (Sentry == nullptr || ModularComponent == nullptr)
-		{
-			return;
-		}
+		check(Sentry != nullptr);
+		check(ModularComponent != nullptr);
+		check(ModularView != nullptr);
 
-		SentryAssembly::Rebuild(this, Sentry, ModularComponent, Sentry.Material);
+		SentryAssembly::Build(this, Sentry, ModularComponent, ModularView);
 	}
 
 	bool HasAimRig() const
@@ -79,15 +63,5 @@ class UBSSentryView : UActorComponent
 		return RotatorComponents.Num() >= 2
 			&& RotatorComponents[0] != nullptr
 			&& RotatorComponents[1] != nullptr;
-	}
-
-	USceneComponent GetDefaultAttachParent(ABSSentry Sentry) const
-	{
-		if (RotatorComponents.Num() > 0)
-		{
-			return RotatorComponents.Last();
-		}
-
-		return Sentry.Base;
 	}
 }

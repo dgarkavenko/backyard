@@ -17,18 +17,17 @@ class ABSSentry : AActor
 	UBSModularComponent ModularComponent;
 
 	UPROPERTY(DefaultComponent)
-	UBSSentryView VisualAdapter;
+	UBSModularView ModularView;
+	default ModularView.MaterialOverride = Material;
+
+	UPROPERTY(DefaultComponent)
+	UBSSentryView SentryView;
 
 	UPROPERTY(DefaultComponent, RootComponent)
 	UStaticMeshComponent Base;
 
 	UPROPERTY(EditAnywhere, Category = "Sentry")
 	UMaterialInterface Material;
-
-	UFUNCTION(BlueprintOverride)
-	void ConstructionScript()
-	{
-	}
 
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()

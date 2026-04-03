@@ -1,4 +1,5 @@
 event void FBSUBSModularComponentDelegate(UBSModularComponent ModularComponent);
+event void FBSUBSModularViewBuiltDelegate(UBSModularComponent ModularComponent, UBSModularView ModularView);
 
 struct FBSSlotRuntime
 {	
@@ -15,12 +16,12 @@ struct FBSSlotRuntime
 	TOptional<int32> ParentIndex;
 }
 
-mixin UBFModuleDefinition GetDefinitionUnsafe(const FBSSlotRuntime& Self, UBSModularComponent ModularComponent)
+mixin UBSModuleDefinition GetDefinitionUnsafe(const FBSSlotRuntime& Self, UBSModularComponent ModularComponent)
 {
 	return ModularComponent.InstalledModules[Self.Content.Value];
 }
 
-mixin UBFModuleDefinition GetDefinitionSafe(const FBSSlotRuntime& Self, UBSModularComponent ModularComponent)
+mixin UBSModuleDefinition GetDefinitionSafe(const FBSSlotRuntime& Self, UBSModularComponent ModularComponent)
 {	
 	if (!Self.Content.IsSet() && Self.Content.Value < ModularComponent.InstalledModules.Num())
 	{
@@ -42,7 +43,7 @@ mixin bool IsChildOf(const FBSSlotRuntime& Self, int32 ParentId)
 class UBSModularComponent : UActorComponent
 {
 	UPROPERTY()
-	TArray<UBFModuleDefinition> InstalledModules;
+	TArray<UBSModuleDefinition> InstalledModules;
 
 	UPROPERTY()
 	TArray<FBSSlotRuntime> Slots;
@@ -53,9 +54,12 @@ class UBSModularComponent : UActorComponent
 	UPROPERTY(Category = "Delegates")
 	FBSUBSModularComponentDelegate OnCompositionChanged;
 
+	UPROPERTY(Category = "Delegates")
+	FBSUBSModularViewBuiltDelegate OnViewBuilt;
+
 	default EnsureRootSlot();
 
-	bool CanAddModule(UBFModuleDefinition NewModule) const
+	bool CanAddModule(UBSModuleDefinition NewModule) const
 	{
 		for (FBSSlotRuntime Slot : Slots)
 		{
@@ -68,7 +72,7 @@ class UBSModularComponent : UActorComponent
 		return false;
 	}
 
-	bool CanAddModuleTo(UBFModuleDefinition NewModule, int32 Index) const
+	bool CanAddModuleTo(UBSModuleDefinition NewModule, int32 Index) const
 	{
 		if (Index >= Slots.Num())
 		{
@@ -85,8 +89,8 @@ class UBSModularComponent : UActorComponent
 		return !TargetSlot.Content.IsSet() && NewModule.Instalation.Matches(TargetSlot.SlotData.Tags);
 	}
 
-	bool AddModule(UBFModuleDefinition NewModule, int32 Index)
-	{
+	bool AddModule(UBSModuleDefinition NewModule, int32 Index)
+	{		
 		InstalledModules.Add(NewModule);
 
 		Slots[Index].Content.Set(InstalledModules.Num() - 1);
@@ -172,14 +176,14 @@ class UBSModularComponent : UActorComponent
 
 	}
 
-	TOptional<int32> GetSlotByModule(UBFModuleDefinition Module)
+	TOptional<int32> GetSlotByModule(UBSModuleDefinition Module)
 	{
 		return InstalledModules.FindIndex(Module);
 	}
 
 	TOptional<int32> GetSlotByModuleIndex(int32 ModuleIndex)
 	{
-		if (ModuleIndex > 0)
+		if (ModuleIndex >= 0 && ModuleIndex < InstalledModules.Num())
 		{
 			for (int32 SlotIndex = 0; SlotIndex < Slots.Num(); SlotIndex++)
 			{

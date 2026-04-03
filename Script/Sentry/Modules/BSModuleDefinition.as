@@ -7,7 +7,7 @@ class UBSModuleDefinition : UBFModuleDefinition
 	default Elements[0].ElementId = n"Base";	
 }
 
-mixin bool IsRootModule(UBFModuleDefinition Self)
+mixin bool IsRootModule(UBSModuleDefinition Self)
 {
 	return Self.Instalation.IsEmpty();
 }
