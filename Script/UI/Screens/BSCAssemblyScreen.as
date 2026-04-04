@@ -188,18 +188,15 @@ class UBSAssemblyScreen : UBSMMScreen
 			{
 				if (bIsSelected)
 				{
-					SentryDebugF::LogAssembly(f"Assembly UI: deselected slot {Index}");
 					SelectedSlotIndex = -1;
 				}
 				else if (ModularComponent.Slots[Index].Content.IsSet())
 				{
-					SentryDebugF::LogAssembly(f"Assembly UI: removing occupied slot {Index} module='{InstalledModule.GetName()}'");
 					ModularComponent.RemoveModule(Index);
 					SelectedSlotIndex = -1;
 				}
 				else
 				{
-					SentryDebugF::LogAssembly(f"Assembly UI: selected slot {Index} socket='{SlotData.Socket}'");
 					SelectedSlotIndex = Index;
 				}
 			}
@@ -275,7 +272,6 @@ class UBSAssemblyScreen : UBSMMScreen
 					{
 						InstallSocket = ModularComponent.Slots[InstallSlotIndex].SlotData.Socket.ToString();
 					}
-					SentryDebugF::LogAssembly(f"Assembly UI: installing '{Module.GetName()}' selectedSlot={InstallSlotIndex} socket='{InstallSocket}'");
 					if (InstallSlotIndex >= 0)
 					{
 						ModularComponent.AddModule(Module, InstallSlotIndex);
@@ -288,7 +284,6 @@ class UBSAssemblyScreen : UBSMMScreen
 				}
 				else if (bCanRemoveSingleInstalled)
 				{
-					SentryDebugF::LogAssembly(f"Assembly UI: removing '{Module.GetName()}'");
 					ModularComponent.RemoveModule(SelectedSlotIndex);
 					SelectedSlotIndex = -1;
 				}
@@ -316,7 +311,6 @@ class UBSAssemblyScreen : UBSMMScreen
 
 		if (bInvalidSelection)
 		{
-			SentryDebugF::LogAssembly(f"Assembly UI: cleared selected slot {SelectedSlotIndex} after composition version");
 			SelectedSlotIndex = -1;
 		}
 	}

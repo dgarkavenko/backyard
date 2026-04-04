@@ -1,42 +1,29 @@
 namespace SentryAim
 {
-	void SeedRuntime(const FBSSentryAimCache& AimCache, FBSSentryTargetingRuntime& TargetingRuntime)
+	void SeedFromComponents(const FBSSentryAimCache& AimCache, FBSSentryTargetingRuntime& TargetingRuntime)
 	{
-		ResetRuntime(TargetingRuntime);
-		if (!AimCache.bHasAimCache)
-		{
-			return;
-		}
-
 		if (AimCache.Rotator0Component == nullptr || AimCache.Rotator1Component == nullptr)
 		{
 			return;
 		}
 
-		TargetingRuntime.DesiredRotator0Local = AimCache.Rotator0Component.RelativeRotation;
-		TargetingRuntime.DesiredRotator1Local = AimCache.Rotator1Component.RelativeRotation;
 		TargetingRuntime.AppliedRotator0Local = AimCache.Rotator0Component.RelativeRotation;
 		TargetingRuntime.AppliedRotator1Local = AimCache.Rotator1Component.RelativeRotation;
-		TargetingRuntime.bHasAimSolution = true;
-		UpdateMuzzleRuntime(AimCache, TargetingRuntime);
 	}
 
-	void Solve(const FBSSentryAimCache& AimCache, FBSSentryTargetingRuntime& TargetingRuntime, float DeltaSeconds)
+	bool Solve(const FBSSentryStatics& Statics, const FBSSentryAimCache& AimCache, FBSSentryTargetingRuntime& TargetingRuntime, float DeltaSeconds)
 	{
-		TargetingRuntime.bHasAimSolution = false;
-		TargetingRuntime.bHasMuzzleState = false;
-		TargetingRuntime.bApplyAim = false;
-
-		if (!AimCache.bHasAimCache)
+		if (!AimCache.bHasAimCache || Statics.Sentry == nullptr || Statics.Sentry.Base == nullptr)
 		{
-			return;
+			return false;
 		}
 
-		FVector TargetBaseLocal = AimCache.BaseWorldTransform.InverseTransformPosition(TargetingRuntime.TargetLocation) - AimCache.Rotator0OffsetLocal;
+		FVector TargetBaseLocal = Statics.Sentry.Base.WorldTransform.InverseTransformPosition(TargetingRuntime.TargetLocation) - AimCache.Rotator0OffsetLocal;
+
 		float DesiredYaw = SolvePlanarAngle(
 			TargetBaseLocal.X,
 			TargetBaseLocal.Y,
-			AimCache.CachedYawLateralOffset,
+			AimCache.Rotator1OffsetLocal.Y + AimCache.MuzzleOffsetLocal.Y,
 			TargetingRuntime.AppliedRotator0Local.Yaw
 		);
 
@@ -50,94 +37,72 @@ namespace SentryAim
 		float DesiredPitch = SolvePlanarAngle(
 			TargetRotator1Local.X,
 			TargetRotator1Local.Z,
-			AimCache.CachedPitchVerticalOffset,
+			AimCache.MuzzleOffsetLocal.Z,
 			TargetingRuntime.AppliedRotator1Local.Pitch
 		);
 
 		FRotator DesiredRotator1 = TargetingRuntime.AppliedRotator1Local;
 		DesiredRotator1.Pitch = DesiredPitch;
 
-		TargetingRuntime.DesiredRotator0Local = DesiredRotator0;
-		TargetingRuntime.DesiredRotator1Local = DesiredRotator1;
 		TargetingRuntime.AppliedRotator0Local = ConstrainRotation(
 			TargetingRuntime.AppliedRotator0Local,
 			DesiredRotator0,
 			AimCache.Rotator0Constraint,
 			DeltaSeconds
 		);
+
 		TargetingRuntime.AppliedRotator1Local = ConstrainRotation(
 			TargetingRuntime.AppliedRotator1Local,
 			DesiredRotator1,
 			AimCache.Rotator1Constraint,
 			DeltaSeconds
 		);
-		TargetingRuntime.bHasAimSolution = true;
-		TargetingRuntime.bApplyAim = true;
-		UpdateMuzzleRuntime(AimCache, TargetingRuntime);
+
+		return true;
 	}
 
-	void Apply(const FBSSentryAimCache& AimCache, FBSSentryTargetingRuntime& TargetingRuntime)
+	bool Apply(const FBSSentryAimCache& AimCache, const FBSSentryTargetingRuntime& TargetingRuntime)
 	{
-		if (!AimCache.bHasAimCache || !TargetingRuntime.bApplyAim)
-		{
-			return;
-		}
-
 		if (AimCache.Rotator0Component == nullptr || AimCache.Rotator1Component == nullptr)
 		{
-			TargetingRuntime.bApplyAim = false;
-			return;
+			return false;
 		}
 
 		AimCache.Rotator0Component.SetRelativeRotation(TargetingRuntime.AppliedRotator0Local);
 		AimCache.Rotator1Component.SetRelativeRotation(TargetingRuntime.AppliedRotator1Local);
-		TargetingRuntime.bApplyAim = false;
+		return true;
 	}
 
-	void ResetRuntime(FBSSentryTargetingRuntime& TargetingRuntime)
+	bool ReadMuzzle(const FBSSentryAimCache& AimCache, FBSSentryTargetingRuntime& TargetingRuntime)
 	{
-		TargetingRuntime.DesiredRotator0Local = FRotator(0, 0, 0);
-		TargetingRuntime.DesiredRotator1Local = FRotator(0, 0, 0);
-		TargetingRuntime.AppliedRotator0Local = FRotator(0, 0, 0);
-		TargetingRuntime.AppliedRotator1Local = FRotator(0, 0, 0);
-		TargetingRuntime.MuzzleWorldLocation = FVector::ZeroVector;
-		TargetingRuntime.MuzzleWorldRotation = FRotator(0, 0, 0);
-		TargetingRuntime.MuzzleError = FRotator(0, 0, 0);
-		TargetingRuntime.DistanceToTarget = 0.0f;
-		TargetingRuntime.AimDot = 0.0f;
-		TargetingRuntime.bHasAimSolution = false;
-		TargetingRuntime.bHasMuzzleState = false;
-		TargetingRuntime.bApplyAim = false;
-	}
-
-	void UpdateMuzzleRuntime(const FBSSentryAimCache& AimCache, FBSSentryTargetingRuntime& TargetingRuntime)
-	{
-		TargetingRuntime.bHasMuzzleState = false;
-
-		if (!AimCache.bHasAimCache)
+		if (AimCache.MuzzleComponent == nullptr || !AimCache.MuzzleComponent.DoesSocketExist(Sentry::MuzzleSocketName))
 		{
-			return;
+			ResetMuzzle(TargetingRuntime);
+			return false;
 		}
 
-		FVector Rotator0WorldLocation = AimCache.BaseWorldTransform.TransformPosition(AimCache.Rotator0OffsetLocal);
-		FQuat Rotator0WorldRotation = AimCache.BaseWorldRotation * TargetingRuntime.AppliedRotator0Local.Quaternion();
-		FVector Rotator1WorldLocation = Rotator0WorldLocation + Rotator0WorldRotation.RotateVector(AimCache.Rotator1OffsetLocal);
-		FQuat Rotator1WorldRotation = Rotator0WorldRotation * TargetingRuntime.AppliedRotator1Local.Quaternion();
-		FVector MuzzleWorldLocation = Rotator1WorldLocation + Rotator1WorldRotation.RotateVector(AimCache.MuzzleOffsetLocal);
-		FQuat MuzzleWorldRotation = Rotator1WorldRotation * AimCache.MuzzleLocalRotation;
-		FVector ToTarget = TargetingRuntime.TargetLocation - MuzzleWorldLocation;
+		FTransform MuzzleSocketWorld = AimCache.MuzzleComponent.GetSocketTransform(Sentry::MuzzleSocketName);
+		FVector ToTarget = TargetingRuntime.TargetLocation - MuzzleSocketWorld.Location;
 		float DistanceToTarget = ToTarget.Size();
-		FVector MuzzleForward = MuzzleWorldRotation.Rotator().ForwardVector.GetSafeNormal();
 		FVector TargetDirection = DistanceToTarget > 0.0f ? ToTarget / DistanceToTarget : FVector::ZeroVector;
+		FRotator MuzzleWorldRotation = MuzzleSocketWorld.Rotation.Rotator();
 
-		TargetingRuntime.MuzzleWorldLocation = MuzzleWorldLocation;
-		TargetingRuntime.MuzzleWorldRotation = MuzzleWorldRotation.Rotator();
+		TargetingRuntime.MuzzleWorldLocation = MuzzleSocketWorld.Location;
+		TargetingRuntime.MuzzleWorldRotation = MuzzleWorldRotation;
 		TargetingRuntime.DistanceToTarget = DistanceToTarget;
-		TargetingRuntime.AimDot = DistanceToTarget > 0.0f ? MuzzleForward.DotProduct(TargetDirection) : 0.0f;
 		TargetingRuntime.MuzzleError = DistanceToTarget > 0.0f
-			? (TargetDirection.Rotation() - MuzzleForward.Rotation()).GetNormalized()
+			? (TargetDirection.Rotation() - MuzzleWorldRotation).GetNormalized()
 			: FRotator(0, 0, 0);
-		TargetingRuntime.bHasMuzzleState = true;
+
+		return true;
+	}
+
+	void ResetMuzzle(FBSSentryTargetingRuntime& TargetingRuntime)
+	{
+		TargetingRuntime.MuzzleWorldLocation = FVector::ZeroVector;
+		TargetingRuntime.MuzzleWorldRotation = FRotator(0, 0, 0);
+		TargetingRuntime.DistanceToTarget = 0.0f;
+		TargetingRuntime.MuzzleError = FRotator(0, 0, 0);
 	}
 
 	float SolvePlanarAngle(float TargetForward, float TargetLateral, float LateralOffset, float FallbackAngle)

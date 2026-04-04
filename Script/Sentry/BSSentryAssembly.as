@@ -1,151 +1,168 @@
 namespace SentryAssembly
 {
-	void Build(UBSSentryWorldSubsystem SentrySubsystem, int RowIndex, ABSSentry Sentry, UBSModularComponent ModularComponent, UBSModularView ModularView)
+	void Build(ABSSentry Sentry,
+			   FBSSentryStatics& Statics,
+			   FBSSentryAimCache& AimCache,
+			   FBSSentryTargetingRuntime& TargetingRuntime,
+			   FBSSentryCombatRuntime& CombatRuntime,
+			   FBSSentryPowerRuntime& PowerRuntime,
+			   FGameplayTagContainer& Capabilities)
 	{
-		if (SentrySubsystem == nullptr || RowIndex < 0 || RowIndex >= SentrySubsystem.AimCache.Num())
+		Statics = FBSSentryStatics();
+		AimCache = FBSSentryAimCache();
+		TargetingRuntime = FBSSentryTargetingRuntime();
+		CombatRuntime = FBSSentryCombatRuntime();
+		PowerRuntime = FBSSentryPowerRuntime();
+
+		ResolveStatics(Sentry, Statics);
+
+		FBSSlotRuntime ChassisSlot;
+		if (Sentry.ModularComponent.FindModule(UBSChassisDefinition, ChassisSlot) != nullptr)
 		{
-			return;
+			CacheChassis(Statics.Chassis, Sentry.ModularView.LastBuildResult.InstalledModuleViews[ChassisSlot.Index], AimCache);
 		}
 
-		BeginRebuild(SentrySubsystem, RowIndex);
-		SentryDebugF::LogAssembly(f"Assembly: cache sentry='{Sentry.GetName()}' modules={ModularComponent.InstalledModules.Num()}");
+		CacheAimGeometry(Sentry, AimCache);
+		CacheCapabilites(Capabilities, Sentry.ModularComponent.InstalledModules);
+	}
 
-		for (int SlotIndex = 0; SlotIndex < ModularComponent.Slots.Num(); SlotIndex++)
+	void CacheCapabilites(FGameplayTagContainer& Capabilities, TArray<UBSModuleDefinition> Modules)
+	{
+		Capabilities = FGameplayTagContainer();
+		for (auto Module : Modules)
 		{
-			FBSSlotRuntime Slot = ModularComponent.Slots[SlotIndex];
-			if (!Slot.Content.IsSet() || SlotIndex >= ModularView.LastBuildResult.InstalledModuleViews.Num())
-			{
-				continue;
-			}
+			Capabilities.AppendTags(Module.Capabilities);
+		}		
+	}
 
-			UBSChassisDefinition ChassisDefinition = Cast<UBSChassisDefinition>(Slot.GetDefinitionUnsafe(ModularComponent));
-			if (ChassisDefinition == nullptr)
-			{
-				continue;
-			}
+	void ResolveStatics(ABSSentry Sentry, FBSSentryStatics& OutStatics)
+	{
+		OutStatics.Sentry = Sentry;
 
-			CacheChassis(ChassisDefinition, ModularView.LastBuildResult.InstalledModuleViews[SlotIndex], SentrySubsystem, RowIndex);
+		FBSSlotRuntime LookupSlot;
+		//TODO: after hardening enough move UBSModularComponent into cpp and use UFUNCTION(Meta=(DeterminesOutputType = "ModuleClass"))
+		OutStatics.Chassis = Cast<UBSChassisDefinition>(Sentry.ModularComponent.FindModule(UBSChassisDefinition, LookupSlot));
+		OutStatics.PowerSupply = Cast<UBSPowerSupplyUnitDefinition>(Sentry.ModularComponent.FindModule(UBSPowerSupplyUnitDefinition, LookupSlot));
+		OutStatics.Turret = Cast<UBSTurretDefinition>(Sentry.ModularComponent.FindModule(UBSTurretDefinition, LookupSlot));
+		OutStatics.Battery = Cast<UBSBatteryDefinition>(Sentry.ModularComponent.FindModule(UBSBatteryDefinition, LookupSlot));	
+	}
+
+	bool CacheChassis(UBSChassisDefinition Definition, const FBSBuiltModuleView& BuiltView, FBSSentryAimCache& AimCache)
+	{
+		if (Definition == nullptr)
+		{
+			return false;
 		}
 
-		CacheGeometry(SentrySubsystem, RowIndex, Sentry);
-		SentryDebugF::LogAssembled(Sentry, SentrySubsystem.AimCache[RowIndex], ModularView);
-		SentryDebugF::ValidateNoGarbageComponents(ModularView, Sentry);
-	}
+		if (Definition.Rotators.Num() != 2)
+		{
+			Warning(f"SentryAssembly requires exactly 2 rotators on chassis '{Definition.GetName()}'");
+			return false;
+		}
 
-	void BeginRebuild(UBSSentryWorldSubsystem SentrySubsystem, int RowIndex)
-	{
-		SentrySubsystem.AimCache[RowIndex] = FBSSentryAimCache();
-	}
-
-	void CacheChassis(UBSChassisDefinition Definition, const FBSBuiltModuleView& BuiltView, UBSSentryWorldSubsystem SentrySubsystem, int RowIndex)
-	{
-		for (int RotatorIndex = 0; RotatorIndex < Definition.Rotators.Num(); RotatorIndex++)
+		for (int RotatorIndex = 0; RotatorIndex < 2; RotatorIndex++)
 		{
 			const FBSChassisRotatorSpec& RotatorSpec = Definition.Rotators[RotatorIndex];
 			USceneComponent ResolvedRotator = ModularAssembly::FindBuiltElementById(BuiltView, RotatorSpec.ElementId);
 			if (ResolvedRotator == nullptr)
 			{
 				Warning(f"SentryAssembly could not resolve rotator[{RotatorIndex}] '{RotatorSpec.ElementId}' on chassis '{Definition.GetName()}'");
-				continue;
+				return false;
 			}
 
-			if (SentrySubsystem.AimCache[RowIndex].Rotator0Component == nullptr)
+			if (RotatorIndex == 0)
 			{
-				SentrySubsystem.AimCache[RowIndex].Rotator0Component = ResolvedRotator;
-				SentrySubsystem.AimCache[RowIndex].Rotator0Constraint = RotatorSpec.Constraint;
-			}
-			else if (SentrySubsystem.AimCache[RowIndex].Rotator1Component == nullptr)
-			{
-				SentrySubsystem.AimCache[RowIndex].Rotator1Component = ResolvedRotator;
-				SentrySubsystem.AimCache[RowIndex].Rotator1Constraint = RotatorSpec.Constraint;
+				AimCache.Rotator0Component = ResolvedRotator;
+				AimCache.Rotator0Constraint = RotatorSpec.Constraint;
 			}
 			else
 			{
-				Warning(f"SentryAssembly ignores extra rotator[{RotatorIndex}] '{RotatorSpec.ElementId}' on chassis '{Definition.GetName()}'");
+				AimCache.Rotator1Component = ResolvedRotator;
+				AimCache.Rotator1Constraint = RotatorSpec.Constraint;
 			}
 		}
+
+		if (!IsYawOnly(AimCache.Rotator0Constraint))
+		{
+			Warning(f"SentryAssembly requires rotator[0] to be yaw-only on chassis '{Definition.GetName()}'");
+			return false;
+		}
+
+		if (!IsPitchOnly(AimCache.Rotator1Constraint))
+		{
+			Warning(f"SentryAssembly requires rotator[1] to be pitch-only on chassis '{Definition.GetName()}'");
+			return false;
+		}
+
+		return AimCache.Rotator0Component != nullptr && AimCache.Rotator1Component != nullptr;
 	}
 
-	void CacheGeometry(UBSSentryWorldSubsystem SentrySubsystem, int RowIndex, ABSSentry Sentry)
+	bool CacheAimGeometry(ABSSentry Sentry, FBSSentryAimCache& AimCache)
 	{
-		FBSSentryAimCache Cache = SentrySubsystem.AimCache[RowIndex];
-		if (Sentry == nullptr || Sentry.Base == nullptr)
+		USceneComponent Rotator0 = AimCache.Rotator0Component;
+		USceneComponent Rotator1 = AimCache.Rotator1Component;
+		if (Sentry == nullptr || Sentry.Base == nullptr || Rotator0 == nullptr || Rotator1 == nullptr)
 		{
-			return;
+			return false;
 		}
 
-		USceneComponent Rotator0 = Cache.Rotator0Component;
-		USceneComponent Rotator1 = Cache.Rotator1Component;
-		if (Rotator0 == nullptr || Rotator1 == nullptr)
+		USceneComponent MuzzleComponent = ResolveMuzzleComponent(Rotator1);
+		if (MuzzleComponent == nullptr || !MuzzleComponent.DoesSocketExist(Sentry::MuzzleSocketName))
 		{
-			FString Rotator0Name = Rotator0 != nullptr ? Rotator0.GetName().ToString() : "<none>";
-			FString Rotator1Name = Rotator1 != nullptr ? Rotator1.GetName().ToString() : "<none>";
-			SentryDebugF::LogAssembly(f"Assembly: missing rotator chain sentry='{Sentry.GetName()}' rotator0='{Rotator0Name}' rotator1='{Rotator1Name}'");
-			SentrySubsystem.AimCache[RowIndex] = FBSSentryAimCache();
-			return;
+			Warning(f"SentryAssembly could not resolve muzzle socket '{Sentry::MuzzleSocketName}' on sentry '{Sentry.GetName()}'");
+			return false;
 		}
 
-		Cache.BaseWorldTransform = Sentry.Base.WorldTransform;
-		Cache.BaseWorldRotation = Sentry.Base.WorldRotation.Quaternion();
-		Cache.Rotator0OffsetLocal = Sentry.Base.WorldTransform.InverseTransformPosition(Rotator0.WorldLocation);
-		Cache.Rotator1OffsetLocal = Rotator0.WorldTransform.InverseTransformPosition(Rotator1.WorldLocation);
+		FTransform MuzzleSocketWorld = MuzzleComponent.GetSocketTransform(Sentry::MuzzleSocketName);
+		AimCache.MuzzleComponent = MuzzleComponent;
+		AimCache.Rotator0OffsetLocal = Sentry.Base.WorldTransform.InverseTransformPosition(Rotator0.WorldLocation);
+		AimCache.Rotator1OffsetLocal = Rotator0.WorldTransform.InverseTransformPosition(Rotator1.WorldLocation);
+		AimCache.MuzzleOffsetLocal = Rotator1.WorldTransform.InverseTransformPosition(MuzzleSocketWorld.Location);
+		AimCache.MuzzleLocalRotation = Rotator1.WorldRotation.Quaternion().Inverse() * MuzzleSocketWorld.Rotation;
 
-		if (Cache.MuzzleComponent == nullptr)
+		FRotator MuzzleLocalRotation = AimCache.MuzzleLocalRotation.Rotator().GetNormalized();
+		if (Math::Abs(MuzzleLocalRotation.Yaw) > 0.1f || Math::Abs(MuzzleLocalRotation.Pitch) > 0.1f)
 		{
-			TArray<USceneComponent> AllChildren;
-			Rotator1.GetChildrenComponents(true, AllChildren);
+			Warning(f"SentryAssembly requires muzzle alignment on sentry '{Sentry.GetName()}'");
+			return false;
+		}
 
-			for (USceneComponent Child : AllChildren)
+		AimCache.bHasAimCache = true;
+		return true;
+	}
+
+	USceneComponent ResolveMuzzleComponent(USceneComponent Rotator1)
+	{
+		if (Rotator1 == nullptr)
+		{
+			return nullptr;
+		}
+
+		if (Rotator1.DoesSocketExist(Sentry::MuzzleSocketName))
+		{
+			return Rotator1;
+		}
+
+		TArray<USceneComponent> Children;
+		Rotator1.GetChildrenComponents(true, Children);
+		for (USceneComponent Child : Children)
+		{
+			if (Child != nullptr && Child.DoesSocketExist(Sentry::MuzzleSocketName))
 			{
-				if (Child.DoesSocketExist(Sentry::MuzzleSocketName))
-				{
-					Cache.MuzzleComponent = Child;
-					break;
-				}
+				return Child;
 			}
 		}
 
-		if (Cache.MuzzleComponent == nullptr || !Cache.MuzzleComponent.DoesSocketExist(Sentry::MuzzleSocketName))
-		{
-			SentryDebugF::LogAssembly(f"Assembly: missing muzzle sentry='{Sentry.GetName()}'");
-			SentrySubsystem.AimCache[RowIndex] = FBSSentryAimCache();
-			return;
-		}
-
-		FTransform MuzzleSocketWorld = Cache.MuzzleComponent.GetSocketTransform(Sentry::MuzzleSocketName);
-		Cache.MuzzleOffsetLocal = Rotator1.WorldTransform.InverseTransformPosition(MuzzleSocketWorld.Location);
-		Cache.MuzzleLocalRotation = Rotator1.WorldRotation.Quaternion().Inverse() * MuzzleSocketWorld.Rotation;
-		if (!HasYawPitchFastPath(Cache))
-		{
-			SentryDebugF::LogAssembly(f"Assembly: invalid yaw/pitch fast path sentry='{Sentry.GetName()}'");
-			SentrySubsystem.AimCache[RowIndex] = FBSSentryAimCache();
-			return;
-		}
-
-		Cache.bHasAimCache = true;
-		Cache.CachedYawLateralOffset = Cache.Rotator1OffsetLocal.Y + Cache.MuzzleOffsetLocal.Y;
-		Cache.CachedYawForwardOffset = Cache.Rotator1OffsetLocal.X + Cache.MuzzleOffsetLocal.X;
-		Cache.CachedPitchVerticalOffset = Cache.MuzzleOffsetLocal.Z;
-		Cache.CachedPitchForwardOffset = Cache.MuzzleOffsetLocal.X;
-		SentrySubsystem.AimCache[RowIndex] = Cache;
+		return nullptr;
 	}
 
-	bool HasYawPitchFastPath(const FBSSentryAimCache& Cache)
+	bool IsYawOnly(const FBSSentryConstraint& Constraint)
 	{
-		const FBSSentryConstraint& Rotator0Constraint = Cache.Rotator0Constraint;
-		const FBSSentryConstraint& Rotator1Constraint = Cache.Rotator1Constraint;
-		if (!Rotator0Constraint.bYaw || Rotator0Constraint.bPitch || Rotator0Constraint.bRoll)
-		{
-			return false;
-		}
+		return Constraint.bYaw && !Constraint.bPitch && !Constraint.bRoll;
+	}
 
-		if (!Rotator1Constraint.bPitch || Rotator1Constraint.bYaw || Rotator1Constraint.bRoll)
-		{
-			return false;
-		}
-
-		FRotator MuzzleLocal = Cache.MuzzleLocalRotation.Rotator().GetNormalized();
-		return Math::Abs(MuzzleLocal.Yaw) < 0.1f
-			&& Math::Abs(MuzzleLocal.Pitch) < 0.1f;
+	bool IsPitchOnly(const FBSSentryConstraint& Constraint)
+	{
+		return Constraint.bPitch && !Constraint.bYaw && !Constraint.bRoll;
 	}
 }

@@ -20,19 +20,21 @@ class ABSSentry : AActor
 	UBSModularView ModularView;
 	default ModularView.MaterialOverride = Material;
 
-	UPROPERTY(DefaultComponent)
-	UBSSentryView SentryView;
-
 	UPROPERTY(DefaultComponent, RootComponent)
 	UStaticMeshComponent Base;
 
 	UPROPERTY(EditAnywhere, Category = "Sentry")
 	UMaterialInterface Material;
 
+
+	TOptional<int> SystemHandle;
+
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()
 	{
 		Base.SetGenerateOverlapEvents(true);
+		ModularComponent.OnViewBuilt.AddUFunction(this, n"OnViewBuilt");
+
 	}
 
 	void DisableTerminalInteraction()
@@ -43,5 +45,29 @@ class ABSSentry : AActor
 	void EnableTerminalInteraction()
 	{
 		InteractionRegistry.RegisterAction(TerminalInteraction.TerminalInteraction);
+	}
+
+	UFUNCTION()
+	void OnViewBuilt(UBSModularComponent BuiltModularComponent, UBSModularView BuiltModularView)
+	{
+		check(BuiltModularComponent != nullptr);
+		check(BuiltModularView != nullptr);
+		
+		UBSSentryWorldSubsystem SentrySubsystem = UBSSentryWorldSubsystem::Get();
+		if (SentrySubsystem != nullptr)
+		{
+			SystemHandle = SentrySubsystem.SyncSentry(this);
+		}
+	}
+
+	UFUNCTION(BlueprintOverride)
+	void EndPlay(EEndPlayReason EndPlayReason)
+	{
+		SystemHandle.Reset();
+		UBSSentryWorldSubsystem SentrySubsystem = UBSSentryWorldSubsystem::Get();
+		if (SentrySubsystem != nullptr)
+		{
+			SentrySubsystem.RemoveSentry(this);
+		}
 	}
 }

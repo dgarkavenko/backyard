@@ -48,9 +48,6 @@ class UBSModularComponent : UActorComponent
 	UPROPERTY()
 	TArray<FBSSlotRuntime> Slots;
 
-	UPROPERTY()
-	FGameplayTagContainer Capabilities;
-
 	UPROPERTY(Category = "Delegates")
 	FBSUBSModularComponentDelegate OnCompositionChanged;
 
@@ -104,7 +101,6 @@ class UBSModularComponent : UActorComponent
 			Slots.Add(SlotRuntime);
 		}
 		
-		BuildCapabilities();
 		OnCompositionChanged.Broadcast(this);
 
 		return true;
@@ -170,7 +166,6 @@ class UBSModularComponent : UActorComponent
 		InstalledModules.SetNum(InsertIndex);
 
 		EnsureRootSlot();
-		BuildCapabilities();
 
 		OnCompositionChanged.Broadcast(this);
 
@@ -205,13 +200,22 @@ class UBSModularComponent : UActorComponent
 		}
 	}
 
-	void BuildCapabilities()
+	UBSModuleDefinition FindModule(TSubclassOf<UBSModuleDefinition> ModuleClass, FBSSlotRuntime& OutSlot)
 	{
-		Capabilities = FGameplayTagContainer();
-		for (auto Definition : InstalledModules)
+		for (FBSSlotRuntime Slot : Slots)
 		{
-			Capabilities.AppendTags(Definition.Capabilities);
+			if (Slot.Content.IsSet())
+			{
+				UBSModuleDefinition Module = Slot.GetDefinitionUnsafe(this);
+				if (Module.IsA(ModuleClass))
+				{
+					OutSlot = Slot;
+					return Module;
+				}
+			}
 		}
+
+		return nullptr;
 	}
 
 	private void MoveSlot(int32 NewIndex, int32 OldIndex)
