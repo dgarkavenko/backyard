@@ -1,6 +1,5 @@
 class UBSPowerSupplyUnitDefinition : UBSModuleDefinition
 {
-	default Capabilities.AddTag(GameplayTags::Backyard_Module_PSU);
 	default Capabilities.AddTag(GameplayTags::Backyard_Capability_Power);
 
 	default Instalation = GameplayTag::MakeGameplayTagQuery_MatchAllTags(GameplayTag::MakeGameplayTagContainerFromTag(GameplayTags::Backyard_Module_PSU));

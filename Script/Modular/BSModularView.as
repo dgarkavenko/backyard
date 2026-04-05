@@ -12,6 +12,9 @@ class UBSModularView : UActorComponent
 	TMap<FName, USceneComponent> SocketOwnerCache;
 	FBSModularBuildResult LastBuildResult;
 
+	UPROPERTY()
+	USpotLightComponent CachedVisorSpotLight;
+
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()
 	{

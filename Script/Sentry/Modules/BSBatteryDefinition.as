@@ -1,7 +1,7 @@
 class UBSBatteryDefinition : UBSModuleDefinition
 {
-	default Capabilities.AddTag(GameplayTags::Backyard_Module_Battery);
 	default Capabilities.AddTag(GameplayTags::Backyard_Capability_Power);
+	default Capabilities.AddTag(GameplayTags::Backyard_Capability_PowerStorage);
 
 	default Instalation = GameplayTag::MakeGameplayTagQuery_MatchAllTags(GameplayTag::MakeGameplayTagContainerFromTag(GameplayTags::Backyard_Module_Battery));
 

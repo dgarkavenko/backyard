@@ -24,6 +24,16 @@ class UBSTerminalInteraction : UActorComponent
 	void ShowScreen(AActor Interactor)
 	{
 		ABFPlayerController PlayerController = Cast<ABFPlayerController>(Interactor.GetOwner());
-		PlayerController.PushWidgetToPrimaryLayout(GameplayTags::ForgeryUI_Layer_GameMenu, WidgetClass);
+		if (PlayerController == nullptr)
+		{
+			return;
+		}
+
+		auto Widget = PlayerController.PushWidgetToPrimaryLayout(GameplayTags::ForgeryUI_Layer_GameMenu, WidgetClass);
+		UBSSentryScreen SentryScreen = Cast<UBSSentryScreen>(Widget);
+		if (SentryScreen != nullptr)
+		{
+			SentryScreen.OwningSentry = Cast<ABSSentry>(Owner);
+		}
 	}
 }

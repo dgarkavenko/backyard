@@ -4,10 +4,9 @@ namespace SentryFiring
 	{
 		ABSSentry Sentry = Statics.Sentry;
 		UBSTurretDefinition Turret = Statics.Turret;
-		if (Sentry == nullptr || Turret == nullptr)
-		{
-			return;
-		}
+		check(Sentry != nullptr);
+		check(Turret != nullptr);
+		check(AimCache.MuzzleComponent != nullptr);
 
 		FVector MuzzleLocation = TargetingRuntime.MuzzleWorldLocation;		
 		

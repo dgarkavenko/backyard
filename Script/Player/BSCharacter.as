@@ -12,6 +12,9 @@ class ABSCharacter : ACharacter
 	USpotLightComponent SpotLight;
 
 	UPROPERTY(DefaultComponent)
+	UBSTargetableComponent Targetable;
+
+	UPROPERTY(DefaultComponent)
 	UBFPhysicsCarryComponent PhysicsCarry;
 
 	UPROPERTY(DefaultComponent)

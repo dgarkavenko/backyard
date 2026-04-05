@@ -8,6 +8,8 @@ namespace Sentry
 	const FName AssemblyRoleYawTag = n"Yaw";
 	const FName AssemblyRolePitchTag = n"Pitch";
 	const FName AssemblyRoleMuzzleTag = n"Muzzle";
+	const FLinearColor VisorSweepLightColor = FLinearColor(1.00f, 0.31f, 0.07f);
+	const FLinearColor VisorActiveLightColor = FLinearColor(1.0f, 0.0f, 0.0f);
 }
 
 struct FBSModuleAssemblyElement
