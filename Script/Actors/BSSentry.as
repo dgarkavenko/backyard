@@ -35,7 +35,10 @@ class ABSSentry : AActor
 	void BeginPlay()
 	{
 		Base.SetGenerateOverlapEvents(true);
-		UI::GetHUD().RegisterWidget(Base, WorldMarkerWidgetClass, FVector::UpVector * 60);			
+		auto Widget = UI::GetHUD().RegisterWidget(Base, WorldMarkerWidgetClass, FVector::UpVector * 10);			
+		UBSSentryMarker SentryMarker = Cast<UBSSentryMarker>(Widget);
+		SentryMarker.Model = this;
+	
 	}
 
 	void DisableTerminalInteraction()

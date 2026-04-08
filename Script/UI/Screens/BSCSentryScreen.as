@@ -203,10 +203,39 @@ class UBSSentryScreen : UBSMMScreen
 	private void DrawPowerRuntime(UBSRuntimeSubsystem SentrySubsystem, int RowIndex) const
 	{
 		const FBSPowerRuntime& Power = SentrySubsystem.GetPowerRuntime(RowIndex);
+		const FBPowerRuntimeChildren& PowerChildren = SentrySubsystem.Store.PowerRuntimeChildren[RowIndex];
 
 		mm::BeginBorder(SectionColor);
+		mm::Padding(10.0f);
+		mm::BeginVerticalBox();
 
+			mm::Text("Root", 14, HeaderColor);
+			DrawPowerRuntimeValues(Power);
+			DrawLabeledValue("Batteries", f"{PowerChildren.Batteries.Num()}");
+
+			for (int BatteryIndex = 0; BatteryIndex < PowerChildren.Batteries.Num(); BatteryIndex++)
+			{
+				const FBSPowerRuntime& Battery = PowerChildren.Batteries[BatteryIndex];
+				mm::Spacer(6.0f);
+				mm::Text(f"Battery[{BatteryIndex}]", 14, HeaderColor);
+				DrawPowerRuntimeValues(Battery);
+			}
+
+		mm::EndVerticalBox();
 		mm::EndBorder();
+	}
+
+	private void DrawPowerRuntimeValues(const FBSPowerRuntime& Power) const
+	{
+		DrawLabeledValue("TapSource", FormatTapSource(Power.TapSource));
+		DrawLabeledValue("ChildrenReserve", f"{Power.ChildrenReserve}");
+		DrawLabeledValue("Reserve", f"{Power.Reserve}");
+		DrawLabeledValue("AccumulatedDecrease", f"{Power.AccumulatedDecrease}");
+		DrawLabeledValue("AccumulatedTransfer", f"{Power.AccumulatedTransfer}");
+		DrawLabeledValue("Insufficency", f"{Power.Insufficency}");
+		DrawLabeledValue("Output", f"{Power.Output}");
+		DrawLabeledValue("Capacity", f"{Power.Capacity}");
+		DrawLabeledValue("Supplied", FormatBool(Power.bSupplied));
 	}
 
 	private void DrawLabeledValue(const FString& Label, const FString& Value) const
@@ -265,6 +294,16 @@ class UBSSentryScreen : UBSMMScreen
 	private FString FormatRotator(FRotator Value) const
 	{
 		return f"P={Value.Pitch} Y={Value.Yaw} R={Value.Roll}";
+	}
+
+	private FString FormatTapSource(const TOptional<int32>& TapSource) const
+	{
+		return TapSource.IsSet() ? f"{TapSource.Value}" : "<none>";
+	}
+
+	private FString FormatBool(bool bValue) const
+	{
+		return bValue ? "true" : "false";
 	}
 
 	private FString DescribeVisionState(EBSSentryVisionState VisionState) const

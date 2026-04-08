@@ -2,7 +2,7 @@ class UBSRuntimeSubsystem : UScriptWorldSubsystem
 {
 	float SetConsumption(int32 RowIndex, float Consumption)
 	{
-		FBSPowerRuntime PowerRuntime = Store.PowerRuntime[RowIndex];
+		FBSPowerRuntime& PowerRuntime = Store.PowerRuntime[RowIndex];
 		PowerRuntime.AccumulatedTransfer += Consumption;
 
 		if (PowerRuntime.TapSource.IsSet() && Store.PowerRuntime[PowerRuntime.TapSource.Value].Reserve > 0)
@@ -32,16 +32,17 @@ class UBSRuntimeSubsystem : UScriptWorldSubsystem
 
 			if (AccumulatedDecreasePerHour > 0 && PowerRuntime.ChildrenReserve > 0)
 			{
-				auto Children = Store.PowerRuntimeChildren[RowIndex];
+				FBPowerRuntimeChildren& Children = Store.PowerRuntimeChildren[RowIndex];
 
 				float RemainingDemand = 0;
 				float CombinedChildrenOutput = 0;
 				float CombinedReserve = 0;
+				float BaselineDecreasePerBattery = AccumulatedDecreasePerHour / Children.Batteries.Num();
 
 				// TODO store child reserve
-				for (auto& Child : Children.Batteries)
+				for (FBSPowerRuntime& Child : Children.Batteries)
 				{
-					RemainingDemand += PowerRuntime.AccumulatedDecrease / Children.Batteries.Num();
+					RemainingDemand += BaselineDecreasePerBattery;
 					
 					float ChildReserveSub = Math::Min(Child.Reserve, RemainingDemand);
 					Child.Reserve -= ChildReserveSub;
@@ -52,30 +53,50 @@ class UBSRuntimeSubsystem : UScriptWorldSubsystem
 
 				AccumulatedDecreasePerHour = RemainingDemand;
 				PowerRuntime.Insufficency = Math::Max(0, PowerRuntime.AccumulatedTransfer - AccumulatedDecreasePerHour);
+				PowerRuntime.ChildrenReserve = CombinedReserve;
 			}
 
 			float ReserveSub = Math::Min(PowerRuntime.Reserve, AccumulatedDecreasePerHour);
-			if (ReserveSub > SMALL_NUMBER)
-			{
-				PowerRuntime.Reserve -= ReserveSub;
-				PowerRuntime.Insufficency = Math::Max(0, PowerRuntime.AccumulatedTransfer - PowerRuntime.Output);
-				PowerRuntime.bSupplied = PowerRuntime.Reserve > SMALL_NUMBER;
-			}
-			else
-			{
-				PowerRuntime.bSupplied = true;
-			}			
-
+			PowerRuntime.Reserve -= ReserveSub;
+			PowerRuntime.Insufficency = Math::Max(0, PowerRuntime.AccumulatedTransfer - PowerRuntime.Output);
+			PowerRuntime.bSupplied = PowerRuntime.Reserve > 0 || PowerRuntime.ChildrenReserve > 0;
+		
 			PowerRuntime.AccumulatedDecrease = 0;
 			PowerRuntime.AccumulatedTransfer = 0;		
 		}
 
 		for (int RowIndex = 0; RowIndex < Store.Num(); RowIndex++)
 		{
-			float Consumption = 400;
-			float ChainInsuficency = SetConsumption(RowIndex, 400);			
-
 			FBSSentryStatics& RowStatics = Store.Statics[RowIndex];
+			
+			bool bSupplied = Store.PowerRuntime[RowIndex].bSupplied;
+
+
+			float ChainInsuficency = SetConsumption(RowIndex, 400);
+						
+			USpotLightComponent VisorSpotLight = RowStatics.ModularView.CachedVisorSpotLight;
+			if (VisorSpotLight != nullptr)
+			{
+				if (bSupplied)
+				{
+					if (ChainInsuficency > 0)
+					{	
+						float T = Gameplay::TimeSeconds + RowIndex;
+						float I = Math::Min(1, Math::Abs(2 * Math::Sin(0.3 * T) + Math::Cos(T * 6)));
+						VisorSpotLight.SetIntensity(Math::Lerp(10, 150, I));
+					}
+					else
+					{
+						VisorSpotLight.SetIntensity(400.0f);
+					}
+				}
+				else
+				{
+					VisorSpotLight.SetIntensity(0.0f);
+					continue;
+				}
+			}			
+
 			check(RowStatics.Actor != nullptr);
 			FBSSentryAimCache& RowAimCache = Store.AimCache[RowIndex];
 			FBSSentryPerceptionRuntime& RowPerceptionRuntime = Store.PerceptionRuntime[RowIndex];
@@ -134,11 +155,13 @@ class UBSRuntimeSubsystem : UScriptWorldSubsystem
 		AActor Actor = ModularComponent.Owner;
 		TOptional<int> ExistingRowIndex = Store.FindRowIndex(Actor);
 		int RowIndex = !ExistingRowIndex.IsSet() ? Store.CreateRow(Actor) : ExistingRowIndex.Value;
-
+		
+		Store.Capabilities[RowIndex] = FGameplayTagContainer();
 		ModularComponent.GetAllCapabilities(Store.Capabilities[RowIndex]);
 		ModularAssembly::AssembleView(View, Actor, ModularComponent);
 
 		Store.Statics[RowIndex] = FBSSentryStatics();
+		Store.Statics[RowIndex].ModularView = View;
 		Store.Statics[RowIndex].Actor = Actor;
 
 		PowerAssembly::BuildRow(Store, RowIndex, ModularComponent);

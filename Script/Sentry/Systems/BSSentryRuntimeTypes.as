@@ -96,6 +96,7 @@ struct FBSPowerRuntime
 	TOptional<int32> TapSource;
 
 	float ChildrenReserve;
+	float ChildrenCapacity;
 
 	float Reserve;
 	float AccumulatedDecrease;
@@ -143,6 +144,7 @@ struct FBSSentryStore
 		TargetingRuntime.Add(FBSSentryTargetingRuntime());
 		CombatRuntime.Add(FBSSentryCombatRuntime());
 		PowerRuntime.Add(FBSPowerRuntime());
+		PowerRuntimeChildren.Add(FBPowerRuntimeChildren());
 		return RowIndex;
 	}
 
@@ -156,6 +158,7 @@ struct FBSSentryStore
 		TargetingRuntime[TargetRowIndex] = TargetingRuntime[SourceRowIndex];
 		CombatRuntime[TargetRowIndex] = CombatRuntime[SourceRowIndex];
 		PowerRuntime[TargetRowIndex] = PowerRuntime[SourceRowIndex];
+		PowerRuntimeChildren[TargetRowIndex] = PowerRuntimeChildren[SourceRowIndex];
 	}
 
 	void RemoveRowSwap(int RowIndex)
@@ -174,6 +177,7 @@ struct FBSSentryStore
 		TargetingRuntime.RemoveAt(LastRowIndex);
 		CombatRuntime.RemoveAt(LastRowIndex);
 		PowerRuntime.RemoveAt(LastRowIndex);
+		PowerRuntimeChildren.RemoveAt(LastRowIndex);
 	}
 
 	void Clear()
@@ -186,6 +190,7 @@ struct FBSSentryStore
 		TargetingRuntime.Empty();
 		CombatRuntime.Empty();
 		PowerRuntime.Empty();
+		PowerRuntimeChildren.Empty();		
 	}
 
 	TOptional<int> FindRowIndex(AActor Actor) const

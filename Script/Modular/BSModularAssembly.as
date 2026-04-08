@@ -250,7 +250,8 @@ namespace PowerAssembly
 		FBPowerRuntimeChildren& PowerRuntimeChildren = Store.PowerRuntimeChildren[RowIndex];
 
 		PowerRuntime = FBSPowerRuntime();
-		
+		PowerRuntimeChildren = FBPowerRuntimeChildren();
+
 		FBSSlotRuntime PSU;
 		UBSModuleDefinition PSUDefinition = ModularComponent.FindModule(UBSPowerSupplyUnitDefinition, PSU);
 		if (PSUDefinition != nullptr)
@@ -273,6 +274,7 @@ namespace PowerAssembly
 			PowerRuntimeChildren.Batteries.Add(ChildRuntime);
 
 			PowerRuntime.ChildrenReserve += ChildRuntime.Reserve;
+			PowerRuntime.ChildrenCapacity += ChildRuntime.Reserve;
 		}
 	}
 }
