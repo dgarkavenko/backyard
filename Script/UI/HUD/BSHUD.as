@@ -3,6 +3,9 @@ class UBSHUDRoot : UFUActivatableWidget
 	UPROPERTY(BindWidget)
 	UFUProgressBar Reticle;
 
+	UPROPERTY(BindWidget, meta = (BindWidget))
+	UFUProjectedWidgetHost WorldMarkerHost;
+
 	UPROPERTY(BindWidget, meta = (BindWidgetOptional))
 	UTextBlock InteractionPromptText;
 
@@ -36,6 +39,29 @@ class UBSHUDRoot : UFUActivatableWidget
 
 		UpdateReticle(OwningController.InteractionState.Target != nullptr, DeltaTime);
 		UpdatePromptWidgets(PromptInfo);
+	}
+
+	UFUScreenProjectedWidget RegisterWidget(
+		USceneComponent Anchor,
+		TSubclassOf<UFUScreenProjectedWidget> WidgetClass,
+		FVector AnchorLocalOffset = FVector::ZeroVector,
+		FVector2D ScreenOffset = FVector2D::ZeroVector,
+		int ZOrder = 0)
+	{
+		if (WorldMarkerHost != nullptr)
+		{
+			return WorldMarkerHost.RegisterWidget(Anchor, WidgetClass, AnchorLocalOffset, ScreenOffset, ZOrder);
+		}
+
+		return nullptr;
+	}
+
+	void UnregisterWidget(USceneComponent Anchor)
+	{
+		if (WorldMarkerHost != nullptr)
+		{
+			WorldMarkerHost.UnregisterWidget(Anchor);
+		}
 	}
 
 	private void UpdateReticle(bool bHasInteractionTarget, float DeltaTime)

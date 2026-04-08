@@ -10,7 +10,7 @@ class UBSModularView : UActorComponent
 	int Generation = 0;
 
 	TMap<FName, USceneComponent> SocketOwnerCache;
-	FBSModularBuildResult LastBuildResult;
+	TArray<FBSBuiltModuleView> Build;
 
 	UPROPERTY()
 	USpotLightComponent CachedVisorSpotLight;
@@ -21,8 +21,8 @@ class UBSModularView : UActorComponent
 		UBSModularComponent ModularComponent = UBSModularComponent::Get(Owner);
 		if (ModularComponent != nullptr)
 		{
-			ModularComponent.OnCompositionChanged.AddUFunction(this, n"Build");
-			Build(ModularComponent);
+			ModularComponent.OnCompositionChanged.AddUFunction(this, n"SyncActor");
+			SyncActor(ModularComponent);
 		}
 	}
 
@@ -37,9 +37,12 @@ class UBSModularView : UActorComponent
 	}
 
 	UFUNCTION()
-	void Build(UBSModularComponent ModularComponent)
+	void SyncActor(UBSModularComponent ModularComponent)
 	{
-		LastBuildResult = ModularAssembly::Build(this, Cast<AActor>(Owner), ModularComponent);
-		ModularComponent.OnViewBuilt.Broadcast(ModularComponent, this);
+		UBSRuntimeSubsystem Runtime = UBSRuntimeSubsystem::Get();
+		if (Runtime != nullptr)
+		{
+			Runtime.SyncActor(ModularComponent, this);
+		}
 	}
 }

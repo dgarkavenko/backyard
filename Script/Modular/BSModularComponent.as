@@ -1,5 +1,4 @@
 event void FBSUBSModularComponentDelegate(UBSModularComponent ModularComponent);
-event void FBSUBSModularViewBuiltDelegate(UBSModularComponent ModularComponent, UBSModularView ModularView);
 
 struct FBSSlotRuntime
 {	
@@ -48,21 +47,15 @@ class UBSModularComponent : UActorComponent
 	UPROPERTY()
 	TArray<FBSSlotRuntime> Slots;
 
-	UPROPERTY()
-	FGameplayTagContainer Capabilities;
-
 	UPROPERTY(Category = "Delegates")
 	FBSUBSModularComponentDelegate OnCompositionChanged;
-
-	UPROPERTY(Category = "Delegates")
-	FBSUBSModularViewBuiltDelegate OnViewBuilt;
 
 	default EnsureRootSlot();
 
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()
 	{
-		BuildCapabilities();
+
 	}
 
 	bool CanAddModule(UBSModuleDefinition NewModule) const
@@ -110,7 +103,6 @@ class UBSModularComponent : UActorComponent
 			Slots.Add(SlotRuntime);
 		}
 
-		BuildCapabilities();
 		OnCompositionChanged.Broadcast(this);
 
 		return true;
@@ -124,7 +116,9 @@ class UBSModularComponent : UActorComponent
 		}
 
 		TArray<int32> RemoveList;
-		GatherRecursive(Index, RemoveList);
+		GatherChildrenRecursive(Index, RemoveList);
+
+		Slots[Index].Content.Reset();
 
 		TArray<int32> SurvivedDefinitions;
 		TArray<int32> OrdinalIndex;
@@ -176,10 +170,7 @@ class UBSModularComponent : UActorComponent
 		InstalledModules.SetNum(InsertIndex);
 
 		EnsureRootSlot();
-		BuildCapabilities();
-
 		OnCompositionChanged.Broadcast(this);
-
 	}
 
 	TOptional<int32> GetSlotByModule(UBSModuleDefinition Module)
@@ -211,14 +202,13 @@ class UBSModularComponent : UActorComponent
 		}
 	}
 
-	void BuildCapabilities()
+	void GetAllCapabilities(FGameplayTagContainer& OutTag)
 	{
-		Capabilities = FGameplayTagContainer();
 		for (UBSModuleDefinition Module : InstalledModules)
 		{
 			if (Module != nullptr)
 			{
-				Capabilities.AppendTags(Module.Capabilities);
+				OutTag.AppendTags(Module.Capabilities);
 			}
 		}
 	}
@@ -241,6 +231,21 @@ class UBSModularComponent : UActorComponent
 		return nullptr;
 	}
 
+	void FindSlotsWithModuleType(TSubclassOf<UBSModuleDefinition> ModuleClass, TArray<FBSSlotRuntime>& OutSlots)
+	{		
+		for (FBSSlotRuntime Slot : Slots)
+		{
+			if (Slot.Content.IsSet())
+			{
+				auto Module = Slot.GetDefinitionUnsafe(this);
+				if (Module.IsA(ModuleClass))
+				{
+					OutSlots.Add(Slot);					
+				}
+			}
+		}
+	}
+
 	private void MoveSlot(int32 NewIndex, int32 OldIndex)
 	{
 		Slots[NewIndex] = Slots[OldIndex];
@@ -251,6 +256,17 @@ class UBSModularComponent : UActorComponent
 			if(Slot.IsChildOf(OldIndex))
 			{
 				Slot.ParentIndex.Set(NewIndex);
+			}
+		}
+	}
+
+	private void GatherChildrenRecursive(int32 Index, TArray<int32>& RemoveList)
+	{
+		for (FBSSlotRuntime Slot : Slots)
+		{
+			if (Slot.IsChildOf(Index))
+			{
+				GatherRecursive(Slot.Index, RemoveList);
 			}
 		}
 	}
@@ -266,7 +282,7 @@ class UBSModularComponent : UActorComponent
 		}
 
 		RemoveList.Add(Index);
-	}	
+	}
 	
 	private FString GetOwnerName() const
 	{

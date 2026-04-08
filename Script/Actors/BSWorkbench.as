@@ -8,6 +8,14 @@ class ABSAssemblyBench : AActor
 
 	UPROPERTY(DefaultComponent, Attach = WorkbenchMesh)
 	USceneComponent SentryMountPoint;
+	
+	UPROPERTY(DefaultComponent, Attach = SentryMountPoint)
+	USphereComponent SnapZone;
+	default SnapZone.SetSphereRadius(75.0f);
+	default SnapZone.SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	default SnapZone.SetGenerateOverlapEvents(true);
+	default SnapZone.SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
+	default SnapZone.SetCollisionResponseToChannel(ECollisionChannel::ECC_WorldDynamic, ECollisionResponse::ECR_Overlap);
 
 	UPROPERTY(DefaultComponent)
 	UBSInteractionRegistry InteractionRegistry;
@@ -24,24 +32,11 @@ class ABSAssemblyBench : AActor
 	UPROPERTY(EditAnywhere, Category = "Workbench")
 	FBFInteraction WorkbenchAction;
 
-	UPROPERTY(EditAnywhere, Category = "Workbench|Snap", meta = (ClampMin = "10", ClampMax = "300", Units = "cm"))
-	float SnapZoneRadius = 75.0f;
-
-	TArray<UBSModuleDefinition> GetAvailableModules() const
-	{
-		UBSModuleTaxonomy Taxonomy = UBSModuleTaxonomy::Get();
-		if (Taxonomy != nullptr)
-		{
-			return Taxonomy.GetAllModules();
-		}
-		return TArray<UBSModuleDefinition>();
-	}
-
 	ABSSentry Sentry;
 	ABSSentry PendingSentry;
-	APlayerController ActiveUser;
+	ABSPlayerController ActiveUser;
 	UBSAssemblyScreen CraftMenu;
-	USphereComponent SnapZone;
+	
 	FTimerHandle PendingSentryTimerHandle;
 
 	default CameraViewpoint.bAutoActivate = false;
@@ -51,14 +46,7 @@ class ABSAssemblyBench : AActor
 	{
 		WorkbenchAction.Delegate.BindUFunction(this, n"OnInteracted");
 		InteractionRegistry.RegisterAction(WorkbenchAction);
-
-		SnapZone = USphereComponent::Create(this, n"SnapZone");
-		SnapZone.AttachTo(SentryMountPoint);
-		SnapZone.SetSphereRadius(SnapZoneRadius);
-		SnapZone.SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-		SnapZone.SetGenerateOverlapEvents(true);
-		SnapZone.SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Ignore);
-		SnapZone.SetCollisionResponseToChannel(ECollisionChannel::ECC_WorldDynamic, ECollisionResponse::ECR_Overlap);
+		
 		SnapZone.OnComponentBeginOverlap.AddUFunction(this, n"OnSnapZoneBeginOverlap");
 		SnapZone.OnComponentEndOverlap.AddUFunction(this, n"OnSnapZoneEndOverlap");
 	}
@@ -72,40 +60,39 @@ class ABSAssemblyBench : AActor
 			return;
 		}
 
-		APlayerController Controller = Cast<APlayerController>(InteractorPawn.Controller);
-		if (Controller == nullptr)
-		{
-			return;
+		ABSPlayerController Controller = Cast<ABSPlayerController>(InteractorPawn.Controller);
+		if (Controller != nullptr)
+		{	
+			EnsureSentry();
+			ActivateWorkbench(Controller);
 		}
-
-		if (ActiveUser != nullptr)
-		{
-			return;
-		}
-
-		ActivateWorkbench(Controller);
 	}
 
-	void ActivateWorkbench(APlayerController Controller)
+	void EnsureSentry()
+	{
+		if (SentryClass.Get() != nullptr && Sentry == nullptr)
+		{
+			FVector SpawnLocation = SentryMountPoint.GetWorldLocation();
+			FRotator SpawnRotation = SentryMountPoint.GetWorldRotation();
+			ABSSentry NewSentry = Cast<ABSSentry>(SpawnActor(SentryClass, SpawnLocation, SpawnRotation));
+			MountSentry(NewSentry);
+		}
+	}
+
+	void ActivateWorkbench(ABSPlayerController Controller)
 	{
 		ActiveUser = Controller;
-
 		CameraViewpoint.Activate();
 		Controller.SetViewTargetWithBlend(this, 0.5f);
 
-		ABSPlayerController BSController = Cast<ABSPlayerController>(Controller);
-		if (BSController != nullptr)
-		{
-			UCommonActivatableWidget Widget = BSController.PushWidgetToPrimaryLayout(
-				GameplayTags::ForgeryUI_Layer_GameMenu,
-				CraftMenuWidgetClass
-			);
+		UCommonActivatableWidget Widget = Controller.PushWidgetToPrimaryLayout(
+			GameplayTags::ForgeryUI_Layer_GameMenu,
+			CraftMenuWidgetClass);
 
-			CraftMenu = Cast<UBSAssemblyScreen>(Widget);
-			if (CraftMenu != nullptr)
-			{
-				CraftMenu.OwningWorkbench = this;
-			}
+		CraftMenu = Cast<UBSAssemblyScreen>(Widget);
+		if (CraftMenu != nullptr)
+		{
+			CraftMenu.OwningWorkbench = this;
 		}
 	}
 
@@ -137,13 +124,6 @@ class ABSAssemblyBench : AActor
 	private void OnCameraBlendFinished()
 	{
 		CameraViewpoint.Deactivate();
-	}
-
-	// Sentry State
-
-	bool HasSentry() const
-	{
-		return Sentry != nullptr;
 	}
 
 	void MountSentry(ABSSentry SentryToMount)
@@ -180,41 +160,14 @@ class ABSAssemblyBench : AActor
 		}
 	}
 
-	ABSSentry UnmountSentry()
+	void UnmountSentry()
 	{
-		if (Sentry == nullptr)
+		if (Sentry != nullptr)
 		{
-			return nullptr;
+			Sentry.EnableTerminalInteraction();
+			Sentry = nullptr;
 		}
-
-		ABSSentry Dismounted = Sentry;
-		Sentry = nullptr;
-
-		Dismounted.EnableTerminalInteraction();
-
-		return Dismounted;
 	}
-
-	void CraftNewSentry()
-	{
-		if (SentryClass.Get() == nullptr || Sentry != nullptr)
-		{
-			return;
-		}
-
-		FVector SpawnLocation = SentryMountPoint.GetWorldLocation();
-		FRotator SpawnRotation = SentryMountPoint.GetWorldRotation();
-
-		ABSSentry NewSentry = Cast<ABSSentry>(SpawnActor(SentryClass, SpawnLocation, SpawnRotation));
-		if (NewSentry == nullptr)
-		{
-			return;
-		}
-
-		MountSentry(NewSentry);
-	}
-
-	// Snap Zone
 
 	UFUNCTION()
 	void OnSnapZoneBeginOverlap(

@@ -4,7 +4,10 @@ class UBSModuleDefinition : UBFModuleDefinition
 	TArray<FBSModuleAssemblyElement> Elements;
 
 	default Elements.Add(FBSModuleAssemblyElement());
-	default Elements[0].ElementId = n"Base";	
+	default Elements[0].ElementId = n"Base";
+
+	UPROPERTY(EditAnywhere, meta = (ClampMin = "0", Units = "Wh"))
+	int32 Consumption = 0;
 }
 
 mixin bool IsRootModule(UBSModuleDefinition Self)

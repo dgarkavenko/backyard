@@ -10,20 +10,13 @@ struct FBSBuiltModuleView
 	USceneComponent PrimaryComponent;
 }
 
-struct FBSModularBuildResult
-{
-	/**Matches Slot indexes */
-	TArray<FBSBuiltModuleView> InstalledModuleViews;	
-}
-
 namespace ModularAssembly
 {
-	FBSModularBuildResult Build(UBSModularView View, AActor Owner, UBSModularComponent ModularComponent)
+	void AssembleView(UBSModularView View, AActor Owner, UBSModularComponent ModularComponent)
 	{
 		BeginRebuild(View, Owner);
 
-		FBSModularBuildResult Result;
-		Result.InstalledModuleViews.SetNum(ModularComponent.Slots.Num());
+		View.Build.SetNum(ModularComponent.Slots.Num());
 
 		for (int SlotIndex = 0; SlotIndex < ModularComponent.Slots.Num(); SlotIndex++)
 		{
@@ -36,19 +29,17 @@ namespace ModularAssembly
 
 				if (Module.Elements.Num() > 0)
 				{
-					USceneComponent SlotProviderComponent = ResolveSlotProvider(ModularComponent, SlotIndex, Result.InstalledModuleViews);
+					USceneComponent SlotProviderComponent = ResolveSlotProvider(ModularComponent, SlotIndex, View.Build);
 					Log(n"Assembly", f"Build: {Slot.Index}){Module} with SlotProvider {SlotProviderComponent}@{Slot.SlotData.Socket}");
 
 					BuiltView = BuildModuleElements(Module, SlotProviderComponent, Slot, View, Owner);
 				}
 
-				Result.InstalledModuleViews[SlotIndex] = BuiltView;
+				View.Build[SlotIndex] = BuiltView;
 			}
 		}
 
 		FinishRebuild(View, Owner);
-		View.LastBuildResult = Result;
-		return Result;
 	}
 
 	void BeginRebuild(UBSModularView View, AActor Owner)
@@ -56,7 +47,7 @@ namespace ModularAssembly
 		View.Generation++;
 		View.SocketOwnerCache.Empty();
 		View.ActiveModuleElements.Empty();
-		View.LastBuildResult.InstalledModuleViews.Empty();
+		View.Build.Empty();
 	}
 
 	void FinishRebuild(UBSModularView View, AActor Owner)
@@ -246,6 +237,42 @@ namespace ModularAssembly
 		if (Component != nullptr && Material != nullptr)
 		{
 			Component.SetMaterial(0, Material);
+		}
+	}
+}
+
+
+namespace PowerAssembly
+{
+	void BuildRow(FBSSentryStore& Store, int RowIndex, UBSModularComponent ModularComponent)
+	{
+		FBSPowerRuntime& PowerRuntime = Store.PowerRuntime[RowIndex];
+		FBPowerRuntimeChildren& PowerRuntimeChildren = Store.PowerRuntimeChildren[RowIndex];
+
+		PowerRuntime = FBSPowerRuntime();
+		
+		FBSSlotRuntime PSU;
+		UBSModuleDefinition PSUDefinition = ModularComponent.FindModule(UBSPowerSupplyUnitDefinition, PSU);
+		if (PSUDefinition != nullptr)
+		{
+			PowerRuntime.Output = Cast<UBSPowerSupplyUnitDefinition>(PSUDefinition).MaxOutputWatts;
+			PowerRuntime.Reserve = PowerRuntime.Capacity = Cast<UBSPowerSupplyUnitDefinition>(PSUDefinition).Capacity;
+		}
+
+		TArray<FBSSlotRuntime> BatterySlots;
+		ModularComponent.FindSlotsWithModuleType(UBSBatteryDefinition, BatterySlots);
+
+		for (FBSSlotRuntime Slot : BatterySlots)
+		{
+			FBSPowerRuntime ChildRuntime;
+			UBSModuleDefinition Def = Slot.GetDefinitionUnsafe(ModularComponent);
+			UBSBatteryDefinition PowerDef = Cast<UBSBatteryDefinition>(Def);
+			ChildRuntime.Output = PowerDef.MaxOutputWatts;
+			ChildRuntime.Reserve = ChildRuntime.Capacity = PowerDef.Capacity;
+
+			PowerRuntimeChildren.Batteries.Add(ChildRuntime);
+
+			PowerRuntime.ChildrenReserve += ChildRuntime.Reserve;
 		}
 	}
 }

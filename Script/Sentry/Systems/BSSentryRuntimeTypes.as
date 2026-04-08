@@ -1,11 +1,10 @@
 struct FBSSentryStatics
 {
-	ABSSentry Sentry;
+	AActor Actor;
+	UBSModularView ModularView;
 	UBSChassisDefinition Chassis;
 	UBSVisorDefinition Vision;
 	UBSTurretDefinition Turret;
-	UBSPowerSupplyUnitDefinition PowerSupply;
-	UBSBatteryDefinition Battery;
 }
 
 struct FBSSentryAimCache
@@ -91,8 +90,114 @@ struct FBSSentryCombatRuntime
 {
 	float ShotCooldownRemaining = 0.0f;
 }
+//TODO: Move to generic systems
+struct FBSPowerRuntime
+{	
+	TOptional<int32> TapSource;
 
-struct FBSSentryPowerRuntime
+	float ChildrenReserve;
+
+	float Reserve;
+	float AccumulatedDecrease;
+	float AccumulatedTransfer;
+	float Insufficency;
+
+	float Output = 100;
+	float Capacity = 0;
+
+	bool bSupplied = false;
+}
+
+struct FBPowerRuntimeChildren
 {
-	float Watt;
+	TArray<FBSPowerRuntime> Batteries;
+}
+
+struct FBSSentryStore
+{
+	// TODO:
+	// Actors and Statics.Actor is duplicate
+	TArray<AActor> Actors;
+	TArray<FGameplayTagContainer> Capabilities;
+	TArray<FBSSentryStatics> Statics;
+	TArray<FBSSentryAimCache> AimCache;
+	TArray<FBSSentryPerceptionRuntime> PerceptionRuntime;
+	TArray<FBSSentryTargetingRuntime> TargetingRuntime;
+	TArray<FBSSentryCombatRuntime> CombatRuntime;
+	TArray<FBSPowerRuntime> PowerRuntime;
+	TArray<FBPowerRuntimeChildren> PowerRuntimeChildren;
+
+	int Num() const
+	{
+		return Actors.Num();
+	}
+
+	int CreateRow(AActor Actor)
+	{
+		int RowIndex = Actors.Num();
+		Actors.Add(Actor);
+		Capabilities.Add(FGameplayTagContainer());
+		Statics.Add(FBSSentryStatics());
+		AimCache.Add(FBSSentryAimCache());
+		PerceptionRuntime.Add(FBSSentryPerceptionRuntime());
+		TargetingRuntime.Add(FBSSentryTargetingRuntime());
+		CombatRuntime.Add(FBSSentryCombatRuntime());
+		PowerRuntime.Add(FBSPowerRuntime());
+		return RowIndex;
+	}
+
+	void MoveRow(int TargetRowIndex, int SourceRowIndex)
+	{
+		Actors[TargetRowIndex] = Actors[SourceRowIndex];
+		Capabilities[TargetRowIndex] = Capabilities[SourceRowIndex];
+		Statics[TargetRowIndex] = Statics[SourceRowIndex];
+		AimCache[TargetRowIndex] = AimCache[SourceRowIndex];
+		PerceptionRuntime[TargetRowIndex] = PerceptionRuntime[SourceRowIndex];
+		TargetingRuntime[TargetRowIndex] = TargetingRuntime[SourceRowIndex];
+		CombatRuntime[TargetRowIndex] = CombatRuntime[SourceRowIndex];
+		PowerRuntime[TargetRowIndex] = PowerRuntime[SourceRowIndex];
+	}
+
+	void RemoveRowSwap(int RowIndex)
+	{
+		int LastRowIndex = Actors.Num() - 1;
+		if (RowIndex != LastRowIndex)
+		{
+			MoveRow(RowIndex, LastRowIndex);
+		}
+
+		Actors.RemoveAt(LastRowIndex);
+		Capabilities.RemoveAt(LastRowIndex);
+		Statics.RemoveAt(LastRowIndex);
+		AimCache.RemoveAt(LastRowIndex);
+		PerceptionRuntime.RemoveAt(LastRowIndex);
+		TargetingRuntime.RemoveAt(LastRowIndex);
+		CombatRuntime.RemoveAt(LastRowIndex);
+		PowerRuntime.RemoveAt(LastRowIndex);
+	}
+
+	void Clear()
+	{
+		Actors.Empty();
+		Capabilities.Empty();
+		Statics.Empty();
+		AimCache.Empty();
+		PerceptionRuntime.Empty();
+		TargetingRuntime.Empty();
+		CombatRuntime.Empty();
+		PowerRuntime.Empty();
+	}
+
+	TOptional<int> FindRowIndex(AActor Actor) const
+	{
+		for (int Index = 0; Index < Actors.Num(); Index++)
+		{
+			if (Actors[Index] == Actor)
+			{
+				return Index;
+			}
+		}
+
+		return TOptional<int>();
+	}
 }

@@ -11,8 +11,8 @@ namespace SentryAim
 
 	void Solve(const FBSSentryStatics& Statics, const FBSSentryAimCache& AimCache, FBSSentryTargetingRuntime& TargetingRuntime, float DeltaSeconds)
 	{
-		check(Statics.Sentry != nullptr);
-		check(Statics.Sentry.Base != nullptr);
+		check(Statics.Actor != nullptr);
+		check(Statics.Actor.RootComponent != nullptr);
 		check(AimCache.Rotator0Component != nullptr);
 		check(AimCache.Rotator1Component != nullptr);
 		check(AimCache.MuzzleComponent != nullptr);
@@ -101,7 +101,7 @@ namespace SentryAim
 						   FRotator& DesiredRotator0,
 						   FRotator& DesiredRotator1)
 	{
-		FVector TargetBaseLocal = Statics.Sentry.Base.WorldTransform.InverseTransformPosition(TargetingRuntime.TargetLocation) - AimCache.Rotator0OffsetLocal;
+		FVector TargetBaseLocal = Statics.Actor.ActorTransform.InverseTransformPosition(TargetingRuntime.TargetLocation) - AimCache.Rotator0OffsetLocal;
 
 		float DesiredYaw = SolvePlanarAngle(
 			TargetBaseLocal.X,
@@ -134,10 +134,10 @@ namespace SentryAim
 								FVector& PreviewMuzzleLocation,
 								FRotator& PreviewMuzzleRotation)
 	{
-		check(Statics.Sentry != nullptr);
-		check(Statics.Sentry.Base != nullptr);
+		check(Statics.Actor != nullptr);
+		check(Statics.Actor.RootComponent != nullptr);
 
-		FTransform BaseWorld = Statics.Sentry.Base.WorldTransform;
+		FTransform BaseWorld = Statics.Actor.ActorTransform;
 		FQuat Rotator0WorldRotation = BaseWorld.Rotation * TargetingRuntime.AppliedRotator0Local.Quaternion();
 		FVector Rotator0WorldLocation = BaseWorld.TransformPosition(AimCache.Rotator0OffsetLocal);
 		FQuat Rotator1WorldRotation = Rotator0WorldRotation * TargetingRuntime.AppliedRotator1Local.Quaternion();

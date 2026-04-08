@@ -18,3 +18,16 @@ class UBSModuleTaxonomy : UBFNativeModuleTaxonomy
 		return Result;
 	}
 }
+
+namespace Taxonomy
+{	
+	TArray<UBSModuleDefinition> GetAvailableModules()
+	{
+		UBSModuleTaxonomy Taxonomy = UBSModuleTaxonomy::Get();
+		if (Taxonomy != nullptr)
+		{
+			return Taxonomy.GetAllModules();
+		}
+		return TArray<UBSModuleDefinition>();
+	}
+}

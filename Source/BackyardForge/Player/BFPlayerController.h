@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "CommonPlayerController.h"
 #include "GameplayTagContainer.h"
+#include "Framework/FUPrimaryGameLayout.h"
 #include "BFPlayerController.generated.h"
 
 class UCommonActivatableWidget;
@@ -29,6 +30,9 @@ protected:
 	
 	UFUNCTION(BlueprintImplementableEvent)
 	void ReceiveSetupInputComponent();
+
+	UFUNCTION(ScriptCallable)
+	UFUPrimaryGameLayout* GetPrimaryGameLayout();
 
 	UFUNCTION(ScriptCallable)
 	UCommonActivatableWidget* PushWidgetToPrimaryLayout(const FGameplayTag LayerName, UClass* ActivatableWidgetClass);

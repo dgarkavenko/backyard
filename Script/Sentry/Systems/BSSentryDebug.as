@@ -37,6 +37,24 @@ namespace SentryDebugF
 
 	}
 
+	void Tick(FBSSentryStore& Store)
+	{
+		int32 Num = Store.Num();
+
+		for (int Index = 0; Index < Num; ++Index)
+		{
+			if (SentryDebugF::ShowAim.Int > 0)
+			{
+				SentryDebugF::DrawAim(Store.TargetingRuntime[Index]);
+			}
+
+			if (SentryDebugF::ShowVision.Int > 0 && Store.Capabilities[Index].HasTag(GameplayTags::Backyard_Capability_Detection))
+			{
+				SentryDebugF::DrawVision(Store.Statics[Index], Store.AimCache[Index], Store.PerceptionRuntime[Index]);
+			}
+		}
+	}
+
 	void DrawAim(FBSSentryTargetingRuntime& TargetingRuntime)
 	{
 		FVector MuzzleLocation = TargetingRuntime.MuzzleWorldLocation;
@@ -98,7 +116,7 @@ namespace SentryDebugF
 
 		for (const FBSTargetSnapshot& Snapshot : TargetWorldSubsystem.Snapshots)
 		{
-			if (Snapshot.Actor == nullptr || Snapshot.Actor == Statics.Sentry)
+			if (Snapshot.Actor == nullptr || Snapshot.Actor == Statics.Actor)
 			{
 				continue;
 			}
@@ -132,7 +150,7 @@ namespace SentryDebugF
 
 		for (const FBSTargetSnapshot& Snapshot : TargetWorldSubsystem.Snapshots)
 		{
-			if (Snapshot.Actor == nullptr || Snapshot.Actor == Statics.Sentry)
+			if (Snapshot.Actor == nullptr || Snapshot.Actor == Statics.Actor)
 			{
 				continue;
 			}
@@ -150,7 +168,7 @@ namespace SentryDebugF
 				continue;
 			}
 
-			bool bHasLineOfSight = SentryVision::HasLineOfSight(Statics.Sentry, SensorOrigin, Snapshot);
+			bool bHasLineOfSight = SentryVision::HasLineOfSight(Statics.Actor, SensorOrigin, Snapshot);
 			FLinearColor CandidateDrawColor = bHasLineOfSight ? CandidateColor : FailedLineOfSightColor;
 			float PointSize = bHasLineOfSight ? 8.0f : 10.0f;
 
@@ -196,8 +214,8 @@ namespace SentryDebugF
 		System::DrawDebugLine(SectorOrigin, SectorOrigin + LeftDirection * VisionRange, FLinearColor::Blue, 0, 1.0f);
 		System::DrawDebugLine(SectorOrigin, SectorOrigin + RightDirection * VisionRange, FLinearColor::Blue, 0, 1.0f);
 
-		FVector NeutralForward = Statics.Sentry != nullptr && Statics.Sentry.Base != nullptr
-			? FVector(Statics.Sentry.Base.WorldRotation.ForwardVector.X, Statics.Sentry.Base.WorldRotation.ForwardVector.Y, 0.0f).GetSafeNormal()
+		FVector NeutralForward = Statics.Actor != nullptr && Statics.Actor.RootComponent != nullptr
+			? FVector(Statics.Actor.ActorRotation.ForwardVector.X, Statics.Actor.ActorRotation.ForwardVector.Y, 0.0f).GetSafeNormal()
 			: HorizontalForward;
 		if (NeutralForward.IsNearlyZero())
 		{

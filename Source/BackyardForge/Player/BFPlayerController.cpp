@@ -34,6 +34,11 @@ void ABFPlayerController::SetupInputComponent()
 	ReceiveSetupInputComponent();
 }
 
+UFUPrimaryGameLayout* ABFPlayerController::GetPrimaryGameLayout()
+{
+	return Cast<UFUPrimaryGameLayout>(UPrimaryGameLayout::GetPrimaryGameLayout(this));
+}
+
 UCommonActivatableWidget* ABFPlayerController::PushWidgetToPrimaryLayout(const FGameplayTag LayerName, UClass* ActivatableWidgetClass)
 {
 	if (ActivatableWidgetClass == nullptr)

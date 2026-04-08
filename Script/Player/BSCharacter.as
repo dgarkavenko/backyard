@@ -64,7 +64,7 @@ class ABSCharacter : ACharacter
 
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()
-	{
+	{		
 		Mesh.FirstPersonPrimitiveType = EFirstPersonPrimitiveType::WorldSpaceRepresentation;
 		FirstPersonMesh.FirstPersonPrimitiveType = EFirstPersonPrimitiveType::FirstPerson;
 
@@ -85,11 +85,13 @@ class ABSCharacter : ACharacter
 		CharacterMovement.MaxWalkSpeed = WalkSpeed;
 	}
 
+	UFUNCTION()
 	void StartSprint()
 	{
 		CharacterMovement.MaxWalkSpeed = SprintSpeed;		
 	}
 
+	UFUNCTION()
 	void StopSprint()
 	{
 		CharacterMovement.MaxWalkSpeed = WalkSpeed;

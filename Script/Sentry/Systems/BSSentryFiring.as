@@ -2,9 +2,7 @@ namespace SentryFiring
 {
 	void Shot(const FBSSentryStatics& Statics, const FBSSentryAimCache& AimCache, FBSSentryTargetingRuntime& TargetingRuntime)
 	{
-		ABSSentry Sentry = Statics.Sentry;
 		UBSTurretDefinition Turret = Statics.Turret;
-		check(Sentry != nullptr);
 		check(Turret != nullptr);
 		check(AimCache.MuzzleComponent != nullptr);
 
@@ -38,7 +36,7 @@ namespace SentryFiring
 
 		Projectile.DragType = EBFProjectileDrag::VeryLow;
 		Projectile.Instigator = nullptr;
-		Projectile.Causer = Sentry;
+		Projectile.Causer = Statics.Actor;
 		Projectile.Lifetime = 10;
 		Projectile.Position = MuzzleLocation;
 		Projectile.Velocity = TargetingRuntime.MuzzleWorldRotation.ForwardVector * 300 * 100;

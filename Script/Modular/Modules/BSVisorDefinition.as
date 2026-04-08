@@ -36,4 +36,7 @@ class UBSVisorDefinition : UBSModuleDefinition
 
 	UPROPERTY(EditAnywhere, Category = "Detection", meta = (ClampMin = "0"))
 	int MaxLosChecksPerUpdate = 8;
+
+	UPROPERTY(EditAnywhere, Category = "Power", meta = (ClampMin = "0", Units = "W"))
+	float DetectionPowerDrawWatts = 10.0f;
 }

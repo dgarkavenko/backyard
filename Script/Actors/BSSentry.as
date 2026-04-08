@@ -26,15 +26,16 @@ class ABSSentry : AActor
 	UPROPERTY(EditAnywhere, Category = "Sentry")
 	UMaterialInterface Material;
 
+	UPROPERTY()
+	TSubclassOf<UFUScreenProjectedWidget> WorldMarkerWidgetClass;
 
-	TOptional<int> SystemHandle;
+	USceneComponent CurrentMarkerAnchor;
 
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()
 	{
 		Base.SetGenerateOverlapEvents(true);
-		ModularComponent.OnViewBuilt.AddUFunction(this, n"OnViewBuilt");
-
+		UI::GetHUD().RegisterWidget(Base, WorldMarkerWidgetClass, FVector::UpVector * 60);			
 	}
 
 	void DisableTerminalInteraction()
@@ -45,29 +46,5 @@ class ABSSentry : AActor
 	void EnableTerminalInteraction()
 	{
 		InteractionRegistry.RegisterAction(TerminalInteraction.TerminalInteraction);
-	}
-
-	UFUNCTION()
-	void OnViewBuilt(UBSModularComponent BuiltModularComponent, UBSModularView BuiltModularView)
-	{
-		check(BuiltModularComponent != nullptr);
-		check(BuiltModularView != nullptr);
-		
-		UBSSentryWorldSubsystem SentrySubsystem = UBSSentryWorldSubsystem::Get();
-		if (SentrySubsystem != nullptr)
-		{
-			SystemHandle = SentrySubsystem.SyncSentry(this);
-		}
-	}
-
-	UFUNCTION(BlueprintOverride)
-	void EndPlay(EEndPlayReason EndPlayReason)
-	{
-		SystemHandle.Reset();
-		UBSSentryWorldSubsystem SentrySubsystem = UBSSentryWorldSubsystem::Get();
-		if (SentrySubsystem != nullptr)
-		{
-			SentrySubsystem.RemoveSentry(this);
-		}
 	}
 }

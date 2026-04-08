@@ -1,27 +1,39 @@
 namespace SentryAssembly
 {
+	void BuildRow(FBSSentryStore& Store, int RowIndex, AActor Actor)
+	{
+		auto Sentry = Cast<ABSSentry>(Actor);
+
+		if (Sentry != nullptr)
+		{
+			Build(Sentry,
+				  Store.Statics[RowIndex],
+				  Store.AimCache[RowIndex],
+				  Store.TargetingRuntime[RowIndex],
+				  Store.PerceptionRuntime[RowIndex],
+				  Store.CombatRuntime[RowIndex],
+				  Store.Capabilities[RowIndex]);
+		}
+	}
+
 	void Build(ABSSentry Sentry,
 			   FBSSentryStatics& Statics,
 			   FBSSentryAimCache& AimCache,
 			   FBSSentryTargetingRuntime& TargetingRuntime,
 			   FBSSentryPerceptionRuntime& PerceptionRuntime,
 			   FBSSentryCombatRuntime& CombatRuntime,
-			   FBSSentryPowerRuntime& PowerRuntime,
 			   FGameplayTagContainer& Capabilities)
 	{
 		check(Sentry != nullptr);
 		check(Sentry.ModularComponent != nullptr);
 		check(Sentry.ModularView != nullptr);
 
-		Statics = FBSSentryStatics();
 		AimCache = FBSSentryAimCache();
 		TargetingRuntime = FBSSentryTargetingRuntime();
 		PerceptionRuntime = FBSSentryPerceptionRuntime();
 		CombatRuntime = FBSSentryCombatRuntime();
-		PowerRuntime = FBSSentryPowerRuntime();
 
 		ResolveStatics(Sentry, Statics);
-		CacheCapabilities(Capabilities, Sentry.ModularComponent);
 
 		if (Capabilities.HasTag(GameplayTags::Backyard_Capability_Detection))
 		{
@@ -37,7 +49,7 @@ namespace SentryAssembly
 			UBSModuleDefinition Chassis = Sentry.ModularComponent.FindModule(UBSChassisDefinition, ChassisSlot);
 			check(Chassis != nullptr, "Aim capability requires a resolvable chassis slot");
 
-			CacheChassis(Statics.Chassis, Sentry.ModularView.LastBuildResult.InstalledModuleViews[ChassisSlot.Index], AimCache);
+			CacheChassis(Statics.Chassis, Sentry.ModularView.Build[ChassisSlot.Index], AimCache);
 			CacheAimGeometry(Sentry, AimCache);
 			CacheMotionRuntime(Statics.Chassis, PerceptionRuntime);
 		}
@@ -48,23 +60,13 @@ namespace SentryAssembly
 		}
 	}
 
-	void CacheCapabilities(FGameplayTagContainer& Capabilities, UBSModularComponent ModularComponent)
-	{
-		check(ModularComponent != nullptr);
-		Capabilities = ModularComponent.Capabilities;
-	}
-
 	void ResolveStatics(ABSSentry Sentry, FBSSentryStatics& OutStatics)
 	{
-		OutStatics.Sentry = Sentry;
-
 		FBSSlotRuntime LookupSlot;
-		//TODO: after hardening enough move UBSModularComponent into cpp and use UFUNCTION(Meta=(DeterminesOutputType = "ModuleClass"))
+		// TODO: after hardening enough move UBSModularComponent into cpp and use UFUNCTION(Meta=(DeterminesOutputType = "ModuleClass"))
 		OutStatics.Chassis = Cast<UBSChassisDefinition>(Sentry.ModularComponent.FindModule(UBSChassisDefinition, LookupSlot));
 		OutStatics.Vision = Cast<UBSVisorDefinition>(Sentry.ModularComponent.FindModule(UBSVisorDefinition, LookupSlot));
-		OutStatics.PowerSupply = Cast<UBSPowerSupplyUnitDefinition>(Sentry.ModularComponent.FindModule(UBSPowerSupplyUnitDefinition, LookupSlot));
 		OutStatics.Turret = Cast<UBSTurretDefinition>(Sentry.ModularComponent.FindModule(UBSTurretDefinition, LookupSlot));
-		OutStatics.Battery = Cast<UBSBatteryDefinition>(Sentry.ModularComponent.FindModule(UBSBatteryDefinition, LookupSlot));	
 	}
 
 	void CacheChassis(UBSChassisDefinition Definition, const FBSBuiltModuleView& BuiltView, FBSSentryAimCache& AimCache)
@@ -187,7 +189,7 @@ namespace SentryAssembly
 			return nullptr;
 		}
 
-		return ResolveVisorComponentInView(Sentry.ModularView.LastBuildResult.InstalledModuleViews[VisorSlot.Index]);
+		return ResolveVisorComponentInView(Sentry.ModularView.Build[VisorSlot.Index]);
 	}
 
 	USceneComponent ResolveMuzzleComponent(ABSSentry Sentry, USceneComponent Rotator1)
@@ -199,7 +201,7 @@ namespace SentryAssembly
 			UBSModuleDefinition Turret = Sentry.ModularComponent.FindModule(UBSTurretDefinition, ModuleSlot);
 			if (Turret != nullptr)
 			{
-				USceneComponent TurretMuzzle = ResolveMuzzleComponentInView(Sentry.ModularView.LastBuildResult.InstalledModuleViews[ModuleSlot.Index]);
+				USceneComponent TurretMuzzle = ResolveMuzzleComponentInView(Sentry.ModularView.Build[ModuleSlot.Index]);
 				if (TurretMuzzle != nullptr)
 				{
 					return TurretMuzzle;
@@ -209,7 +211,7 @@ namespace SentryAssembly
 			UBSModuleDefinition Visor = Sentry.ModularComponent.FindModule(UBSVisorDefinition, ModuleSlot);
 			if (Visor != nullptr)
 			{
-				USceneComponent VisorMuzzle = ResolveMuzzleComponentInView(Sentry.ModularView.LastBuildResult.InstalledModuleViews[ModuleSlot.Index]);
+				USceneComponent VisorMuzzle = ResolveMuzzleComponentInView(Sentry.ModularView.Build[ModuleSlot.Index]);
 				if (VisorMuzzle != nullptr)
 				{
 					return VisorMuzzle;

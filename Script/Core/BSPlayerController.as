@@ -13,7 +13,7 @@ class ABSPlayerController : ABFPlayerController
 	TSubclassOf<UCommonActivatableWidget> DebugScreen;
 
 	UPROPERTY()
-	TSubclassOf<UCommonActivatableWidget> HUDRoot;
+	TSubclassOf<UBSHUDRoot> HUDRoot;
 
 	UPROPERTY(Category = "Input")
 	UInputAction ShowDebugAction;
@@ -42,7 +42,6 @@ class ABSPlayerController : ABFPlayerController
 	UFUNCTION(BlueprintOverride)
 	void BeginPlay()
 	{
-		PushWidgetToPrimaryLayout(GameplayTags::ForgeryUI_Layer_Game, HUDRoot);
 	}
 
 	UFUNCTION(BlueprintOverride)
@@ -200,21 +199,6 @@ class ABSPlayerController : ABFPlayerController
 		{
 			return;
 		}
-
-		SpawnPrimaryProjectile(Character.Camera.WorldLocation + Character.Camera.ForwardVector * 100.0f, Character.Camera.ForwardVector, Character);
-
-		// UBSInteractionRegistry Focused = InteractorComponent.FocusedInteractable;
-		// if (Focused != nullptr)
-		// {
-		// 	FGameplayTagContainer InteractorTags = Character.GetCombinedInteractorTags();
-		// 	FBSResolvedAction ToolAction = BSInteraction::ResolveToolAction(Focused, InteractorTags);
-
-		// 	if (ToolAction.bValid)
-		// 	{
-		// 		ExecuteResolvedAction(ToolAction, Character);
-		// 		return;
-		// 	}
-		// }
 	}
 
 	UFUNCTION()
@@ -232,7 +216,7 @@ class ABSPlayerController : ABFPlayerController
 	{
 		PushWidgetToPrimaryLayout(GameplayTags::ForgeryUI_Layer_GameMenu, DebugScreen);
 	}
-
+	
 	void ExecuteResolvedAction(FBSResolvedAction Resolved, AActor Interactor)
 	{
 		Print(f"ExecuteResolvedAction {Resolved.Action.DisplayName}");
@@ -279,28 +263,5 @@ class ABSPlayerController : ABFPlayerController
 	ABSCharacter GetBSCharacter()
 	{
 		return Cast<ABSCharacter>(GetControlledPawn());
-	}
-
-	void SpawnPrimaryProjectile(FVector Origin, FVector Direction, AActor Causer)
-	{
-		if (Causer == nullptr)
-		{
-			return;
-		}
-
-		FBFProjectileSpawnParams Projectile;
-
-		Projectile.DragType = EBFProjectileDrag::VeryLow;
-		Projectile.Instigator = this;
-		Projectile.Causer = Causer;
-		Projectile.Lifetime = 10;
-		Projectile.Position = Origin;
-		Projectile.Velocity = Direction.GetSafeNormal() * 730 * 10;
-
-		auto BFProjectileSubsystem = UBFProjectileSubsystem::Get();
-		if (BFProjectileSubsystem != nullptr)
-		{
-			BFProjectileSubsystem.SpawnProjectile(Projectile);
-		}
 	}
 }

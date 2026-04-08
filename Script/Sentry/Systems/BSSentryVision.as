@@ -6,7 +6,7 @@ namespace SentryVision
 				FBSSentryPerceptionRuntime& PerceptionRuntime,
 				float DeltaSeconds)
 	{
-		check(Statics.Sentry != nullptr);
+		check(Statics.Actor != nullptr);
 		check(Statics.Vision != nullptr, "Detection capability requires a detector module");
 
 		RefreshStateBetweenDetection(PerceptionRuntime);
@@ -44,7 +44,7 @@ namespace SentryVision
 
 		for (const FBSTargetSnapshot& Snapshot : TargetWorldSubsystem.Snapshots)
 		{
-			if (Snapshot.Actor == nullptr || Snapshot.Actor == Statics.Sentry)
+			if (Snapshot.Actor == nullptr || Snapshot.Actor == Statics.Actor)
 			{
 				continue;
 			}
@@ -73,7 +73,7 @@ namespace SentryVision
 			}
 
 			RemainingLosChecks--;
-			if (!HasLineOfSight(Statics.Sentry, SensorOrigin, Snapshot))
+			if (!HasLineOfSight(Statics.Actor, SensorOrigin, Snapshot))
 			{
 				continue;
 			}
@@ -249,13 +249,13 @@ namespace SentryVision
 
 	void ApplyVisorLightColor(const FBSSentryStatics& Statics, const FBSSentryPerceptionRuntime& PerceptionRuntime)
 	{
-		check(Statics.Sentry != nullptr);
-		if (Statics.Sentry.ModularView == nullptr)
+		check(Statics.Actor != nullptr);
+		if (Statics.ModularView == nullptr)
 		{
 			return;
 		}
 
-		USpotLightComponent VisorSpotLight = Statics.Sentry.ModularView.CachedVisorSpotLight;
+		USpotLightComponent VisorSpotLight = Statics.ModularView.CachedVisorSpotLight;
 		if (VisorSpotLight == nullptr)
 		{
 			return;
@@ -484,7 +484,7 @@ namespace SentryVision
 		PerceptionRuntime.ProbeDwellRemaining = 0.0f;
 	}
 
-	bool HasLineOfSight(ABSSentry Sentry, const FVector& SensorOrigin, const FBSTargetSnapshot& Snapshot)
+	bool HasLineOfSight(AActor Sentry, const FVector& SensorOrigin, const FBSTargetSnapshot& Snapshot)
 	{
 		TArray<AActor> IgnoredActors;
 		IgnoredActors.Add(Sentry);
@@ -520,9 +520,10 @@ namespace SentryVision
 			return SentryAim::ResolveMuzzleTransform(AimCache.MuzzleComponent).Location;
 		}
 
-		check(Statics.Sentry != nullptr);
-		check(Statics.Sentry.Base != nullptr);
-		return Statics.Sentry.Base.WorldLocation;
+		check(Statics.Actor != nullptr);
+		// TODO
+		// Cache sentry base instead?		
+		return Statics.Actor.ActorLocation;
 	}
 
 	FVector ResolveSensorForward(const FBSSentryStatics& Statics, const FBSSentryAimCache& AimCache)
@@ -532,9 +533,10 @@ namespace SentryVision
 			return SentryAim::ResolveMuzzleTransform(AimCache.MuzzleComponent).Rotation.Rotator().ForwardVector.GetSafeNormal();
 		}
 
-		check(Statics.Sentry != nullptr);
-		check(Statics.Sentry.Base != nullptr);
-		return Statics.Sentry.Base.WorldRotation.ForwardVector.GetSafeNormal();
+		check(Statics.Actor != nullptr);
+		// TODO
+		// Cache sentry base instead?		
+		return Statics.Actor.ActorForwardVector;
 	}
 
 	FVector ResolveTrackedTargetLocation(AActor TargetActor)

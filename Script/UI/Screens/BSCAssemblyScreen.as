@@ -32,15 +32,6 @@ class UBSAssemblyScreen : UBSMMScreen
 			return;
 		}
 
-		if (!bInitialized)
-		{
-			bInitialized = true;
-			if (!OwningWorkbench.HasSentry())
-			{
-				OwningWorkbench.CraftNewSentry();
-			}
-		}
-
 		ABSSentry Sentry = GetSentry();
 		if (Sentry != nullptr && SentryDebugF::ShowSockets.Int > 0)
 		{
@@ -60,7 +51,7 @@ class UBSAssemblyScreen : UBSMMScreen
 				mm::Text("SENTRY ASSEMBLY", 28, FLinearColor::White, false, true);
 				mm::Spacer(15.0f);
 
-				if (OwningWorkbench.HasSentry())
+				if (OwningWorkbench.Sentry != nullptr)
 				{
 					DrawSlotsSection();
 					mm::Spacer(15.0f);
@@ -216,7 +207,7 @@ class UBSAssemblyScreen : UBSMMScreen
 
 		SyncSelectedSlot(ModularComponent);
 
-		TArray<UBSModuleDefinition> AllModules = OwningWorkbench.GetAvailableModules();
+		TArray<UBSModuleDefinition> AllModules = Taxonomy::GetAvailableModules();
 
 		for (int Index = 0; Index < AllModules.Num(); Index++)
 		{

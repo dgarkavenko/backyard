@@ -21,7 +21,7 @@ class UBSSentryScreen : UBSMMScreen
 	{
 		Super::Tick(MyGeometry, InDeltaTime);
 
-		ABSSentry Sentry = ResolveSentry();
+		ABSSentry Sentry = OwningSentry;
 		TOptional<int> RowIndex = FindRowIndex(Sentry);
 
 		mm::BeginDraw(MMWidget);
@@ -56,7 +56,7 @@ class UBSSentryScreen : UBSMMScreen
 
 					if (RowIndex.IsSet())
 					{
-						UBSSentryWorldSubsystem SentrySubsystem = UBSSentryWorldSubsystem::Get();
+						UBSRuntimeSubsystem SentrySubsystem = UBSRuntimeSubsystem::Get();
 						check(SentrySubsystem != nullptr);
 
 						DrawRuntimeHeader("PERCEPTION", bShowPerceptionRuntime);
@@ -131,10 +131,10 @@ class UBSSentryScreen : UBSMMScreen
 		}
 	}
 
-	private void DrawPerceptionRuntime(UBSSentryWorldSubsystem SentrySubsystem, int RowIndex) const
+	private void DrawPerceptionRuntime(UBSRuntimeSubsystem SentrySubsystem, int RowIndex) const
 	{
-		const FBSSentryPerceptionRuntime& Perception = SentrySubsystem.PerceptionRuntime[RowIndex];
-		const FBSSentryStatics& RowStatics = SentrySubsystem.Statics[RowIndex];
+		const FBSSentryPerceptionRuntime& Perception = SentrySubsystem.GetPerceptionRuntime(RowIndex);
+		const FBSSentryStatics& RowStatics = SentrySubsystem.GetStatics(RowIndex);
 
 		mm::BeginBorder(SectionColor);
 		mm::Padding(10.0f);
@@ -166,9 +166,9 @@ class UBSSentryScreen : UBSMMScreen
 		mm::EndBorder();
 	}
 
-	private void DrawTargetingRuntime(UBSSentryWorldSubsystem SentrySubsystem, int RowIndex) const
+	private void DrawTargetingRuntime(UBSRuntimeSubsystem SentrySubsystem, int RowIndex) const
 	{
-		const FBSSentryTargetingRuntime& Targeting = SentrySubsystem.TargetingRuntime[RowIndex];
+		const FBSSentryTargetingRuntime& Targeting = SentrySubsystem.GetTargetingRuntime(RowIndex);
 
 		mm::BeginBorder(SectionColor);
 		mm::Padding(10.0f);
@@ -186,9 +186,9 @@ class UBSSentryScreen : UBSMMScreen
 		mm::EndBorder();
 	}
 
-	private void DrawCombatRuntime(UBSSentryWorldSubsystem SentrySubsystem, int RowIndex) const
+	private void DrawCombatRuntime(UBSRuntimeSubsystem SentrySubsystem, int RowIndex) const
 	{
-		const FBSSentryCombatRuntime& Combat = SentrySubsystem.CombatRuntime[RowIndex];
+		const FBSSentryCombatRuntime& Combat = SentrySubsystem.GetCombatRuntime(RowIndex);
 
 		mm::BeginBorder(SectionColor);
 		mm::Padding(10.0f);
@@ -200,17 +200,12 @@ class UBSSentryScreen : UBSMMScreen
 		mm::EndBorder();
 	}
 
-	private void DrawPowerRuntime(UBSSentryWorldSubsystem SentrySubsystem, int RowIndex) const
+	private void DrawPowerRuntime(UBSRuntimeSubsystem SentrySubsystem, int RowIndex) const
 	{
-		const FBSSentryPowerRuntime& Power = SentrySubsystem.PowerRuntime[RowIndex];
+		const FBSPowerRuntime& Power = SentrySubsystem.GetPowerRuntime(RowIndex);
 
 		mm::BeginBorder(SectionColor);
-		mm::Padding(10.0f);
-		mm::BeginVerticalBox();
 
-			DrawLabeledValue("Watt", f"{Power.Watt}");
-
-		mm::EndVerticalBox();
 		mm::EndBorder();
 	}
 
@@ -221,35 +216,13 @@ class UBSSentryScreen : UBSMMScreen
 
 	private FGameplayTagContainer ResolveCapabilities(TOptional<int> RowIndex) const
 	{
-		UBSSentryWorldSubsystem SentrySubsystem = UBSSentryWorldSubsystem::Get();
+		UBSRuntimeSubsystem SentrySubsystem = UBSRuntimeSubsystem::Get();
 		if (SentrySubsystem != nullptr && RowIndex.IsSet())
 		{
-			return SentrySubsystem.Capabilities[RowIndex.Value];
-		}
-
-		ABSSentry Sentry = ResolveSentry();
-		if (Sentry != nullptr && Sentry.ModularComponent != nullptr)
-		{
-			return Sentry.ModularComponent.Capabilities;
+			return SentrySubsystem.Store.Capabilities[RowIndex.Value];
 		}
 
 		return FGameplayTagContainer();
-	}
-
-	private ABSSentry ResolveSentry() const
-	{
-		if (OwningSentry != nullptr)
-		{
-			return OwningSentry;
-		}
-
-		UBSSentryWorldSubsystem SentrySubsystem = UBSSentryWorldSubsystem::Get();
-		if (SentrySubsystem == nullptr || SentrySubsystem.RowSentries.Num() != 1)
-		{
-			return nullptr;
-		}
-
-		return SentrySubsystem.RowSentries[0];
 	}
 
 	private TOptional<int> FindRowIndex(ABSSentry Sentry) const
@@ -259,27 +232,19 @@ class UBSSentryScreen : UBSMMScreen
 			return TOptional<int>();
 		}
 
-		UBSSentryWorldSubsystem SentrySubsystem = UBSSentryWorldSubsystem::Get();
+		UBSRuntimeSubsystem SentrySubsystem = UBSRuntimeSubsystem::Get();
 		if (SentrySubsystem == nullptr)
 		{
 			return TOptional<int>();
 		}
 
-		for (int Index = 0; Index < SentrySubsystem.RowSentries.Num(); Index++)
-		{
-			if (SentrySubsystem.RowSentries[Index] == Sentry)
-			{
-				return Index;
-			}
-		}
-
-		return TOptional<int>();
+		return SentrySubsystem.GetRowIndex(Sentry);
 	}
 
 	private int GetRuntimeRowCount() const
 	{
-		UBSSentryWorldSubsystem SentrySubsystem = UBSSentryWorldSubsystem::Get();
-		return SentrySubsystem == nullptr ? 0 : SentrySubsystem.RowSentries.Num();
+		UBSRuntimeSubsystem SentrySubsystem = UBSRuntimeSubsystem::Get();
+		return SentrySubsystem == nullptr ? 0 : SentrySubsystem.GetRowCount();
 	}
 
 	private FString DescribeObject(UObject Object) const
