@@ -66,6 +66,10 @@ A major reward in this game is watching prior preparation become present stabili
 **Accomplishes:** gives emotional ownership to imperfect success.  
 **Cost / risk:** none; this is a key emotional reward.
 
+## Other
+- [[08 - Move Library - Configuration and Adaptive Defense#Trust automation to do one job]] because contemplation often starts with delegated responsibility.
+- [[08 - Move Library - Configuration and Adaptive Defense#Prepare one ugly fallback plan]] because fallback preparation is often validated only later.
+
 ## Related notes
 - [[02 - Intended Experience]]
 - [[08 - Move Library - Configuration and Adaptive Defense]]

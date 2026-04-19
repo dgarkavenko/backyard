@@ -13,40 +13,40 @@ These are the moves most central to the fantasy and identity of the game.
 
 ## Top 12 core moves
 
-### 1. Do the full perimeter walk
+### 1. [[05 - Move Library - Routine and Maintenance#Do the full perimeter walk|Do the full perimeter walk]]
 Establishes ritual, ownership, and material understanding of the station.
 
-### 2. Perform preventive maintenance on a system that still works
+### 2. [[05 - Move Library - Routine and Maintenance#Perform preventive maintenance on a system that still works|Perform preventive maintenance on a system that still works]]
 Defines maintenance as foresight, not housekeeping.
 
-### 3. Leave a damaged system limping
+### 3. [[05 - Move Library - Routine and Maintenance#Leave a damaged system limping|Leave a damaged system limping]]
 Creates debt, compromise, and authored future weakness.
 
-### 4. Postpone an upgrade because repair comes first
+### 4. [[06 - Move Library - Scarcity and Deprivation#Postpone an upgrade because repair comes first|Postpone an upgrade because repair comes first]]
 Anchors scarcity-driven prioritization.
 
-### 5. Suspect the obvious route is a feint
+### 5. [[07 - Move Library - Anticipation and Interpretation#Suspect the obvious route is a feint|Suspect the obvious route is a feint]]
 Supports anticipatory play over pure reaction.
 
-### 6. Delay action to gather one more confirming signal
+### 6. [[07 - Move Library - Anticipation and Interpretation#Delay action to gather one more confirming signal|Delay action to gather one more confirming signal]]
 Builds suspense and gives information value.
 
-### 7. Reposition a turret for a narrower but stronger lane
+### 7. [[08 - Move Library - Configuration and Adaptive Defense#Reposition a turret for a narrower but stronger lane|Reposition a turret for a narrower but stronger lane]]
 Turns defense setup into prediction and commitment.
 
-### 8. Prepare one ugly fallback plan
+### 8. [[08 - Move Library - Configuration and Adaptive Defense#Prepare one ugly fallback plan|Prepare one ugly fallback plan]]
 Supports recoverability instead of brittle perfection.
 
-### 9. Choose which failure becomes real
+### 9. [[09 - Move Library - Emergency and Triage#Choose which failure becomes real|Choose which failure becomes real]]
 This is one of the signature emotional moves of the game.
 
-### 10. Use a crude emergency fix
+### 10. [[09 - Move Library - Emergency and Triage#Use a crude emergency fix|Use a crude emergency fix]]
 Makes survival feel improvised and temporary.
 
-### 11. Wait and watch rather than intervene too early
+### 11. [[10 - Move Library - Postponed Gratification and Contemplation#Wait and watch instead of intervening too early|Wait and watch instead of intervening too early]]
 Enables contemplation and trust in prior preparation.
 
-### 12. Recognize that earlier prep is saving you
+### 12. [[10 - Move Library - Postponed Gratification and Contemplation#Recognize that earlier prep is saving you|Recognize that earlier prep is saving you]]
 This is the delayed gratification payoff.
 
 ## Why these matter

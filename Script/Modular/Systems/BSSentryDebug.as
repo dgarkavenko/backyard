@@ -37,59 +37,77 @@ namespace SentryDebugF
 
 	}
 
-	void Tick(FBSSentryStore& Store)
+	void Tick(FBSRuntimeStore& Store)
 	{
-		int32 Num = Store.Num();
-
-		for (int Index = 0; Index < Num; ++Index)
+		if (SentryDebugF::ShowAim.Int > 0)
 		{
-			if (SentryDebugF::ShowAim.Int > 0)
+			for (int AimIndex = 0; AimIndex < Store.AimHot.Num(); AimIndex++)
 			{
-				SentryDebugF::DrawAim(Store.TargetingRuntime[Index]);
+				SentryDebugF::DrawAim(Store.AimHot[AimIndex]);
 			}
+		}
 
-			if (SentryDebugF::ShowVision.Int > 0 && Store.Capabilities[Index].HasTag(GameplayTags::Backyard_Capability_Detection))
+		if (SentryDebugF::ShowVision.Int > 0)
+		{
+			for (int DetectionIndex = 0; DetectionIndex < Store.DetectionHot.Num(); DetectionIndex++)
 			{
-				SentryDebugF::DrawVision(Store.Statics[Index], Store.AimCache[Index], Store.PerceptionRuntime[Index]);
+				const FBSDetectionHotRow& DetectionHot = Store.DetectionHot[DetectionIndex];
+				const FBSDetectionColdRow& DetectionCold = Store.DetectionCold[DetectionIndex];
+				const FBSBaseRuntimeRow& BaseRow = Store.BaseRows[DetectionHot.OwnerBaseIndex];
+				FBSAimColdRow AimCold;
+				FBSAimHotRow AimHot;
+				bool bHasAim = BaseRow.AimIndex >= 0;
+				if (bHasAim)
+				{
+					AimCold = Store.AimCold[BaseRow.AimIndex];
+					AimHot = Store.AimHot[BaseRow.AimIndex];
+				}
+
+				SentryDebugF::DrawVision(Store, BaseRow, DetectionHot, DetectionCold, AimCold, AimHot, bHasAim);
 			}
 		}
 	}
 
-	void DrawAim(FBSSentryTargetingRuntime& TargetingRuntime)
+	void DrawAim(const FBSAimHotRow& AimHot)
 	{
-		FVector MuzzleLocation = TargetingRuntime.MuzzleWorldLocation;
-		float DistanceToTarget = TargetingRuntime.DistanceToTarget;
+		FVector MuzzleLocation = AimHot.MuzzleWorldLocation;
+		float DistanceToTarget = AimHot.DistanceToTarget;
+		FVector MuzzleForward = AimHot.MuzzleWorldRotation.ForwardVector.GetSafeNormal();
 
-		FVector MuzzleForward = TargetingRuntime.MuzzleWorldRotation.ForwardVector.GetSafeNormal();
-
-		System::DrawDebugLine(MuzzleLocation, TargetingRuntime.TargetLocation, FLinearColor::Yellow, 0, 2);
+		System::DrawDebugLine(MuzzleLocation, AimHot.AimTargetLocation, FLinearColor::Yellow, 0, 2);
 		System::DrawDebugLine(MuzzleLocation, MuzzleLocation + MuzzleForward * DistanceToTarget, FLinearColor::Blue, 0, 2);
-		System::DrawDebugPoint(TargetingRuntime.TargetLocation, 12.0f, FLinearColor::Yellow, 0, EDrawDebugSceneDepthPriorityGroup::Foreground);
+		System::DrawDebugPoint(AimHot.AimTargetLocation, 12.0f, FLinearColor::Yellow, 0, EDrawDebugSceneDepthPriorityGroup::Foreground);
 	}
 
-	void DrawVision(const FBSSentryStatics& Statics, const FBSSentryAimCache& AimCache, const FBSSentryPerceptionRuntime& PerceptionRuntime)
+	void DrawVision(const FBSRuntimeStore& Store,
+					const FBSBaseRuntimeRow& BaseRow,
+					const FBSDetectionHotRow& DetectionHot,
+					const FBSDetectionColdRow& DetectionCold,
+					const FBSAimColdRow& AimCold,
+					const FBSAimHotRow& AimHot,
+					bool bHasAim)
 	{
-		FVector SensorOrigin = SentryVision::ResolveSensorOrigin(Statics, AimCache);
-		FVector SensorForward = SentryVision::ResolveSensorForward(Statics, AimCache);
-		float VisionRange = Statics.Vision != nullptr ? Statics.Vision.Range : 300.0f;
+		FVector SensorOrigin = SentryVision::ResolveSensorOrigin(BaseRow, DetectionCold);
+		FVector SensorForward = SentryVision::ResolveSensorForward(BaseRow, DetectionCold);
+		float VisionRange = DetectionHot.Range;
 
 		if (ShowVision.Int >= 1)
 		{
-			DrawTargetables(Statics);
+			DrawTargetables(BaseRow);
 		}
 
 		if (ShowVision.Int >= 2)
 		{
-			DrawVisionCandidates(Statics, SensorOrigin, SensorForward, VisionRange);
-			DrawVisionSector(Statics, AimCache, SensorOrigin, SensorForward, VisionRange);
+			DrawVisionCandidates(BaseRow, DetectionHot, SensorOrigin, SensorForward, VisionRange);
+			DrawVisionSector(BaseRow, DetectionHot, AimCold, SensorOrigin, SensorForward, VisionRange, bHasAim);
 		}
 
 		System::DrawDebugPoint(SensorOrigin, 10.0f, FLinearColor::Blue, 0, EDrawDebugSceneDepthPriorityGroup::Foreground);
 		System::DrawDebugLine(SensorOrigin, SensorOrigin + SensorForward * VisionRange, FLinearColor::Blue, 0, 1.0f);
 
-		for (const FBSSentryContactMemory& Memory : PerceptionRuntime.ContactMemory)
+		for (const FBSSentryContactMemory& Memory : DetectionHot.ContactMemory)
 		{
-			bool bIsCurrentTarget = PerceptionRuntime.CurrentTarget != nullptr && Memory.Actor == PerceptionRuntime.CurrentTarget;
+			bool bIsCurrentTarget = DetectionHot.CurrentTarget != nullptr && Memory.Actor == DetectionHot.CurrentTarget;
 			if (!Memory.bVisibleThisUpdate && !bIsCurrentTarget)
 			{
 				continue;
@@ -106,7 +124,7 @@ namespace SentryDebugF
 		}
 	}
 
-	void DrawTargetables(const FBSSentryStatics& Statics)
+	void DrawTargetables(const FBSBaseRuntimeRow& BaseRow)
 	{
 		UBSTargetWorldSubsystem TargetWorldSubsystem = UBSTargetWorldSubsystem::Get();
 		if (TargetWorldSubsystem == nullptr)
@@ -116,7 +134,7 @@ namespace SentryDebugF
 
 		for (const FBSTargetSnapshot& Snapshot : TargetWorldSubsystem.Snapshots)
 		{
-			if (Snapshot.Actor == nullptr || Snapshot.Actor == Statics.Actor)
+			if (Snapshot.Actor == nullptr || Snapshot.Actor == BaseRow.Actor)
 			{
 				continue;
 			}
@@ -125,15 +143,18 @@ namespace SentryDebugF
 		}
 	}
 
-	void DrawVisionCandidates(const FBSSentryStatics& Statics,
+	void DrawVisionCandidates(const FBSBaseRuntimeRow& BaseRow,
+							  const FBSDetectionHotRow& DetectionHot,
 							  const FVector& SensorOrigin,
 							  const FVector& SensorForward,
 							  float VisionRange)
 	{
-		if (Statics.Vision == nullptr)
-		{
-			return;
-		}
+		const float VisionRangeSquared = VisionRange * VisionRange;
+		const float HalfFovRadians = Math::DegreesToRadians(DetectionHot.HorizontalFovDegrees * 0.5f);
+		const float MinimumDot = DetectionHot.HorizontalFovDegrees >= 360.0f ? -1.0f : Math::Cos(HalfFovRadians);
+		const FVector HorizontalSensorForward = SentryVision::ResolveHorizontalDirection(SensorForward, FVector::ForwardVector);
+		const FLinearColor CandidateColor = FLinearColor(0.45f, 0.8f, 1.0f, 0.85f);
+		const FLinearColor FailedLineOfSightColor = FLinearColor(0.35f, 0.35f, 0.35f, 0.95f);
 
 		UBSTargetWorldSubsystem TargetWorldSubsystem = UBSTargetWorldSubsystem::Get();
 		if (TargetWorldSubsystem == nullptr)
@@ -141,16 +162,9 @@ namespace SentryDebugF
 			return;
 		}
 
-		const float VisionRangeSquared = VisionRange * VisionRange;
-		const float HalfFovRadians = Math::DegreesToRadians(Statics.Vision.HorizontalFovDegrees * 0.5f);
-		const float MinimumDot = Statics.Vision.HorizontalFovDegrees >= 360.0f ? -1.0f : Math::Cos(HalfFovRadians);
-		const FVector HorizontalSensorForward = SentryVision::ResolveHorizontalDirection(SensorForward, FVector::ForwardVector);
-		const FLinearColor CandidateColor = FLinearColor(0.45f, 0.8f, 1.0f, 0.85f);
-		const FLinearColor FailedLineOfSightColor = FLinearColor(0.35f, 0.35f, 0.35f, 0.95f);
-
 		for (const FBSTargetSnapshot& Snapshot : TargetWorldSubsystem.Snapshots)
 		{
-			if (Snapshot.Actor == nullptr || Snapshot.Actor == Statics.Actor)
+			if (Snapshot.Actor == nullptr || Snapshot.Actor == BaseRow.Actor)
 			{
 				continue;
 			}
@@ -168,7 +182,7 @@ namespace SentryDebugF
 				continue;
 			}
 
-			bool bHasLineOfSight = SentryVision::HasLineOfSight(Statics.Actor, SensorOrigin, Snapshot);
+			bool bHasLineOfSight = SentryVision::HasLineOfSight(BaseRow.Actor, SensorOrigin, Snapshot);
 			FLinearColor CandidateDrawColor = bHasLineOfSight ? CandidateColor : FailedLineOfSightColor;
 			float PointSize = bHasLineOfSight ? 8.0f : 10.0f;
 
@@ -176,25 +190,22 @@ namespace SentryDebugF
 		}
 	}
 
-	void DrawVisionSector(const FBSSentryStatics& Statics,
-						  const FBSSentryAimCache& AimCache,
+	void DrawVisionSector(const FBSBaseRuntimeRow& BaseRow,
+						  const FBSDetectionHotRow& DetectionHot,
+						  const FBSAimColdRow& AimCold,
 						  const FVector& SensorOrigin,
 						  const FVector& SensorForward,
-						  float VisionRange)
+						  float VisionRange,
+						  bool bHasAim)
 	{
-		if (Statics.Vision == nullptr)
-		{
-			return;
-		}
-
-		FVector SectorOrigin = AimCache.Rotator0Component != nullptr ? AimCache.Rotator0Component.WorldLocation : SensorOrigin;
+		FVector SectorOrigin = AimCold.Rotator0Component != nullptr ? AimCold.Rotator0Component.WorldLocation : SensorOrigin;
 		FVector HorizontalForward = FVector(SensorForward.X, SensorForward.Y, 0.0f).GetSafeNormal();
 		if (HorizontalForward.IsNearlyZero())
 		{
 			HorizontalForward = FVector::ForwardVector;
 		}
 
-		float HalfFovDegrees = Statics.Vision.HorizontalFovDegrees * 0.5f;
+		float HalfFovDegrees = DetectionHot.HorizontalFovDegrees * 0.5f;
 		float RadiusStep = 150.0f;
 		float AngleStepDegrees = 10.0f;
 
@@ -214,18 +225,33 @@ namespace SentryDebugF
 		System::DrawDebugLine(SectorOrigin, SectorOrigin + LeftDirection * VisionRange, FLinearColor::Blue, 0, 1.0f);
 		System::DrawDebugLine(SectorOrigin, SectorOrigin + RightDirection * VisionRange, FLinearColor::Blue, 0, 1.0f);
 
-		FVector NeutralForward = Statics.Actor != nullptr && Statics.Actor.RootComponent != nullptr
-			? FVector(Statics.Actor.ActorRotation.ForwardVector.X, Statics.Actor.ActorRotation.ForwardVector.Y, 0.0f).GetSafeNormal()
+		if (!bHasAim)
+		{
+			return;
+		}
+
+		FVector NeutralForward = BaseRow.Actor != nullptr && BaseRow.Actor.RootComponent != nullptr
+			? FVector(BaseRow.Actor.ActorRotation.ForwardVector.X, BaseRow.Actor.ActorRotation.ForwardVector.Y, 0.0f).GetSafeNormal()
 			: HorizontalForward;
 		if (NeutralForward.IsNearlyZero())
 		{
 			NeutralForward = HorizontalForward;
 		}
 
-		float HalfYawLimitDegrees = AimCache.Rotator0Constraint.RotationRange * 0.5f;
+		float HalfYawLimitDegrees = AimCold.Rotator0Component != nullptr ? StoreYawHalfRangeHint(AimCold) : 0.0f;
 		FVector LeftYawLimitDirection = FQuat(FVector::UpVector, Math::DegreesToRadians(-HalfYawLimitDegrees)).RotateVector(NeutralForward);
 		FVector RightYawLimitDirection = FQuat(FVector::UpVector, Math::DegreesToRadians(HalfYawLimitDegrees)).RotateVector(NeutralForward);
 		System::DrawDebugLine(SectorOrigin, SectorOrigin + LeftYawLimitDirection * VisionRange, FLinearColor::Red, 0, 2.0f);
 		System::DrawDebugLine(SectorOrigin, SectorOrigin + RightYawLimitDirection * VisionRange, FLinearColor::Red, 0, 2.0f);
+	}
+
+	float StoreYawHalfRangeHint(const FBSAimColdRow& AimCold)
+	{
+		if (AimCold.Chassis == nullptr || AimCold.Chassis.Rotators.Num() < 1)
+		{
+			return 0.0f;
+		}
+
+		return AimCold.Chassis.Rotators[0].Constraint.RotationRange * 0.5f;
 	}
 }

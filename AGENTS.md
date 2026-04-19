@@ -75,9 +75,19 @@ Data-driven interaction foundation in `Script/Interaction/`. Each interactable h
 - **`BSInteractionLibrary.as`**: free functions — `TraceForInteractable()`, `GetFilteredActions()`, `ExecuteAction()`
 - **Requirements**: GameplayTag matching — held item grants tags, action requires tags. `RequiredTags.IsEmpty()` means no requirement.
 
-### Sentry System
+### Sentry Runtime
 
-Modular turret in `Script/Sentry/`. Data-driven via `UBSSentryPreset` data asset (meshes + constraints). Component chain: Base → Rotator01 → Rotator02 → Body via `s_pivot` sockets. `AimAt(FVector)` solves the 2-joint rotation chain. Geometry cached in `BeginPlay` for performance with hundreds of instances.
+Current sentry runtime in `Script/Sentry/` is feature-split rather than monolithic. `BSRuntimeSubsystem.as` owns a thin base row plus dense feature stores split across `Systems/BSRuntimeStore.as` and the feature runtime type files:
+
+- `Power`
+- `Detection`
+- `Aim`
+- `Fire`
+- `Light`
+
+`BSSentryAssembly.as` builds only the features implied by the actor's capabilities. `BSSentryVision.as` owns sensing, contact memory, target acquisition, and probe intent. `BSSentryAim.as` consumes target/probe intent and solves the 2-joint chassis. `BSSentryFiring.as` handles shot execution, and `BSPowerSystem.as` owns shared power data. `UBSModularView` caches the current runtime indices (`RuntimeBaseIndex`, `RuntimePowerIndex`, `RuntimeDetectionIndex`, `RuntimeAimIndex`, `RuntimeFireIndex`, `RuntimeLightIndex`) so hot consumers do not search by actor every frame.
+
+Hot rows keep mutable runtime fields first and copied immutable scalar values at the end under a `// static` section. UObject refs and component caches live in cold rows alongside the feature store. File names remain sentry-oriented because the current composed archetype is still a sentry, but the internal runtime layout is feature-driven and can support detector-only or light-only variants.
 
 ## Config Notes
 
@@ -95,6 +105,7 @@ Modular turret in `Script/Sentry/`. Data-driven via `UBSSentryPreset` data asset
 - When adding AngelScript files, place them in `Script/` at the project root following Hazelight conventions
 - Prefer functional style over OOP — free functions, function libraries, data-driven design over deep class hierarchies
 - Performance-aware programming — cache what you can, avoid per-frame allocations and redundant lookups, think about scale (hundreds of actors)
+- For feature runtime code, prefer dense feature stores plus hot/cold row splits over monolithic all-in-one runtime structs
 - No excessive code comments — code should be self-explanatory
 - Full variable names — `PlayerController` not `PC`, `WorldLocation` not `Loc`
 - Allman brace style — opening `{` on new line, always use braces for `if`/`else`/`for`/`while` blocks, even single-line bodies

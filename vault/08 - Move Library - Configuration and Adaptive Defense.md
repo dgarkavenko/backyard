@@ -80,6 +80,10 @@ These moves let the player author likely futures through incomplete knowledge.
 **Accomplishes:** frees cognitive bandwidth.  
 **Cost / risk:** failure feels personal if trust was misplaced.
 
+## Other
+- [[10 - Move Library - Postponed Gratification and Contemplation#Wait and watch instead of intervening too early]] because a prepared defense matters only if the player can let it play out.
+- [[10 - Move Library - Postponed Gratification and Contemplation#Recognize that earlier prep is saving you]] because adaptive setup is one of the main sources of delayed payoff.
+
 ## Related notes
 - [[10 - Move Library - Postponed Gratification and Contemplation]]
 - [[12 - Core Moves]]

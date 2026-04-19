@@ -5,13 +5,12 @@ class UBSSentryScreen : UBSMMScreen
 
 	default PanelColor = FLinearColor(0.02f, 0.02f, 0.02f, 0.9f);
 
-	bool bShowPerceptionRuntime = false;
-	bool bShowTargetingRuntime = false;
-	bool bShowCombatRuntime = false;
+	bool bShowDetectionRuntime = false;
+	bool bShowAimRuntime = false;
+	bool bShowFireRuntime = false;
 	bool bShowPowerRuntime = false;
 
 	const FLinearColor HeaderColor = FLinearColor(0.6f, 0.6f, 0.6f);
-	const FLinearColor LabelColor = FLinearColor(0.8f, 0.8f, 0.8f);
 	const FLinearColor ValueColor = FLinearColor(1.0f, 1.0f, 1.0f);
 	const FLinearColor MutedColor = FLinearColor(0.55f, 0.55f, 0.55f);
 	const FLinearColor SectionColor = FLinearColor(0.08f, 0.08f, 0.08f, 0.9f);
@@ -22,13 +21,13 @@ class UBSSentryScreen : UBSMMScreen
 		Super::Tick(MyGeometry, InDeltaTime);
 
 		ABSSentry Sentry = OwningSentry;
-		TOptional<int> RowIndex = FindRowIndex(Sentry);
+		UBSModularView RuntimeView = Sentry != nullptr ? Sentry.ModularView : nullptr;
 
 		mm::BeginDraw(MMWidget);
 			mm::HAlign_Fill();
 			mm::VAlign_Fill();
 
-			mm::BeginBorder(PanelColor);			
+			mm::BeginBorder(PanelColor);
 			mm::Padding(20.0f);
 			mm::BeginScrollBox();
 			mm::BeginVerticalBox();
@@ -42,48 +41,49 @@ class UBSSentryScreen : UBSMMScreen
 						if (SentrySlot.Content.IsSet())
 						{
 							mm::Text(f"{SentrySlot.GetDefinitionUnsafe(Sentry.ModularComponent).Name}", 14, ValueColor, true);
-						}					
-
+						}
 						mm::EndHorizontalBox();
 					}
 
 					DrawLabeledValue("Sentry", Sentry.GetName().ToString());
-					DrawLabeledValue("Runtime Row", RowIndex.IsSet() ? f"{RowIndex.Value}" : "<missing>");
+					DrawLabeledValue("BaseIndex", RuntimeView != nullptr ? DescribeIndex(RuntimeView.RuntimeBaseIndex) : "<missing>");
+					DrawLabeledValue("DetectionIndex", RuntimeView != nullptr ? DescribeIndex(RuntimeView.RuntimeDetectionIndex) : "<missing>");
+					DrawLabeledValue("AimIndex", RuntimeView != nullptr ? DescribeIndex(RuntimeView.RuntimeAimIndex) : "<missing>");
+					DrawLabeledValue("FireIndex", RuntimeView != nullptr ? DescribeIndex(RuntimeView.RuntimeFireIndex) : "<missing>");
+					DrawLabeledValue("PowerIndex", RuntimeView != nullptr ? DescribeIndex(RuntimeView.RuntimePowerIndex) : "<missing>");
 					mm::Spacer(12.0f);
 
-					DrawCapabilities(RowIndex);
+					DrawCapabilities(RuntimeView);
 					mm::Spacer(12.0f);
 
-					if (RowIndex.IsSet())
+					UBSRuntimeSubsystem Runtime = UBSRuntimeSubsystem::Get();
+					if (Runtime != nullptr && RuntimeView != nullptr && RuntimeView.RuntimeBaseIndex >= 0)
 					{
-						UBSRuntimeSubsystem SentrySubsystem = UBSRuntimeSubsystem::Get();
-						check(SentrySubsystem != nullptr);
-
-						DrawRuntimeHeader("PERCEPTION", bShowPerceptionRuntime);
-						if (bShowPerceptionRuntime)
+						DrawRuntimeHeader("DETECTION", bShowDetectionRuntime);
+						if (bShowDetectionRuntime && RuntimeView.RuntimeDetectionIndex >= 0)
 						{
-							DrawPerceptionRuntime(SentrySubsystem, RowIndex.Value);
+							DrawDetectionRuntime(Runtime, RuntimeView.RuntimeDetectionIndex);
 						}
 
 						mm::Spacer(8.0f);
-						DrawRuntimeHeader("TARGETING", bShowTargetingRuntime);
-						if (bShowTargetingRuntime)
+						DrawRuntimeHeader("AIM", bShowAimRuntime);
+						if (bShowAimRuntime && RuntimeView.RuntimeAimIndex >= 0)
 						{
-							DrawTargetingRuntime(SentrySubsystem, RowIndex.Value);
+							DrawAimRuntime(Runtime, RuntimeView.RuntimeAimIndex);
 						}
 
 						mm::Spacer(8.0f);
-						DrawRuntimeHeader("COMBAT", bShowCombatRuntime);
-						if (bShowCombatRuntime)
+						DrawRuntimeHeader("FIRE", bShowFireRuntime);
+						if (bShowFireRuntime && RuntimeView.RuntimeFireIndex >= 0)
 						{
-							DrawCombatRuntime(SentrySubsystem, RowIndex.Value);
+							DrawFireRuntime(Runtime, RuntimeView.RuntimeFireIndex);
 						}
 
 						mm::Spacer(8.0f);
 						DrawRuntimeHeader("POWER", bShowPowerRuntime);
-						if (bShowPowerRuntime)
+						if (bShowPowerRuntime && RuntimeView.RuntimePowerIndex >= 0)
 						{
-							DrawPowerRuntime(SentrySubsystem, RowIndex.Value);
+							DrawPowerRuntime(Runtime, RuntimeView.RuntimePowerIndex);
 						}
 					}
 					else
@@ -100,16 +100,16 @@ class UBSSentryScreen : UBSMMScreen
 
 			mm::EndVerticalBox();
 			mm::EndScrollBox();
-			mm::EndBorder();			
+			mm::EndBorder();
 		mm::EndDraw();
 	}
 
-	private void DrawCapabilities(TOptional<int> RowIndex) const
+	private void DrawCapabilities(UBSModularView RuntimeView) const
 	{
 		mm::Text("CAPABILITIES", 20, HeaderColor);
 		mm::Spacer(5.0f);
 
-		FGameplayTagContainer CapabilityTags = ResolveCapabilities(RowIndex);
+		FGameplayTagContainer CapabilityTags = ResolveCapabilities(RuntimeView);
 		if (CapabilityTags.GameplayTags.Num() == 0)
 		{
 			mm::Text("<none>", 14, MutedColor);
@@ -131,27 +131,28 @@ class UBSSentryScreen : UBSMMScreen
 		}
 	}
 
-	private void DrawPerceptionRuntime(UBSRuntimeSubsystem SentrySubsystem, int RowIndex) const
+	private void DrawDetectionRuntime(UBSRuntimeSubsystem Runtime, int DetectionIndex) const
 	{
-		const FBSSentryPerceptionRuntime& Perception = SentrySubsystem.GetPerceptionRuntime(RowIndex);
-		const FBSSentryStatics& RowStatics = SentrySubsystem.GetStatics(RowIndex);
+		const FBSDetectionHotRow& Detection = Runtime.GetDetectionRuntime(DetectionIndex);
+		const FBSDetectionColdRow& DetectionCold = Runtime.GetDetectionCold(DetectionIndex);
 
 		mm::BeginBorder(SectionColor);
 		mm::Padding(10.0f);
 		mm::BeginVerticalBox();
 
-			DrawLabeledValue("Detector", DescribeObject(RowStatics.Vision));
-			DrawLabeledValue("State", DescribeVisionState(Perception.VisionState));
-			DrawLabeledValue("CurrentTarget", DescribeActor(Perception.CurrentTarget));
-			DrawLabeledValue("CurrentTargetLocation", FormatVector(Perception.CurrentTargetLocation));
-			DrawLabeledValue("DetectionCooldownRemaining", f"{Perception.DetectionCooldownRemaining}");
-			DrawLabeledValue("ProbeDirection", f"{Perception.ProbeDirection}");
-			DrawLabeledValue("Contacts", f"{Perception.Contacts.Num()}");
-			DrawLabeledValue("Memories", f"{Perception.ContactMemory.Num()}");
+			DrawLabeledValue("Detector", DescribeObject(DetectionCold.Detector));
+			DrawLabeledValue("State", DescribeVisionState(Detection.VisionState));
+			DrawLabeledValue("CurrentTarget", DescribeActor(Detection.CurrentTarget));
+			DrawLabeledValue("CurrentTargetLocation", FormatVector(Detection.CurrentTargetLocation));
+			DrawLabeledValue("DetectionCooldownRemaining", f"{Detection.DetectionCooldownRemaining}");
+			DrawLabeledValue("ProbeDirection", f"{Detection.ProbeDirection}");
+			DrawLabeledValue("ProbeTargetYaw", f"{Detection.ProbeTargetYaw}");
+			DrawLabeledValue("Contacts", f"{Detection.Contacts.Num()}");
+			DrawLabeledValue("Memories", f"{Detection.ContactMemory.Num()}");
 
-			for (int ContactIndex = 0; ContactIndex < Perception.Contacts.Num(); ContactIndex++)
+			for (int ContactIndex = 0; ContactIndex < Detection.Contacts.Num(); ContactIndex++)
 			{
-				const FBSSensedContact& Contact = Perception.Contacts[ContactIndex];
+				const FBSSensedContact& Contact = Detection.Contacts[ContactIndex];
 				mm::Spacer(6.0f);
 				mm::Text(f"Contact[{ContactIndex}]", 14, HeaderColor);
 				DrawLabeledValue("  Actor", DescribeActor(Contact.Actor));
@@ -166,44 +167,50 @@ class UBSSentryScreen : UBSMMScreen
 		mm::EndBorder();
 	}
 
-	private void DrawTargetingRuntime(UBSRuntimeSubsystem SentrySubsystem, int RowIndex) const
+	private void DrawAimRuntime(UBSRuntimeSubsystem Runtime, int AimIndex) const
 	{
-		const FBSSentryTargetingRuntime& Targeting = SentrySubsystem.GetTargetingRuntime(RowIndex);
+		const FBSAimHotRow& Aim = Runtime.GetAimRuntime(AimIndex);
 
 		mm::BeginBorder(SectionColor);
 		mm::Padding(10.0f);
 		mm::BeginVerticalBox();
 
-			DrawLabeledValue("TargetLocation", FormatVector(Targeting.TargetLocation));
-			DrawLabeledValue("AppliedRotator0Local", FormatRotator(Targeting.AppliedRotator0Local));
-			DrawLabeledValue("AppliedRotator1Local", FormatRotator(Targeting.AppliedRotator1Local));
-			DrawLabeledValue("MuzzleWorldLocation", FormatVector(Targeting.MuzzleWorldLocation));
-			DrawLabeledValue("MuzzleWorldRotation", FormatRotator(Targeting.MuzzleWorldRotation));
-			DrawLabeledValue("DistanceToTarget", f"{Targeting.DistanceToTarget}");
-			DrawLabeledValue("MuzzleError", FormatRotator(Targeting.MuzzleError));
+			DrawLabeledValue("HasAimTarget", FormatBool(Aim.bHasAimTarget));
+			DrawLabeledValue("UseProbe", FormatBool(Aim.bUseProbe));
+			DrawLabeledValue("AimTargetLocation", FormatVector(Aim.AimTargetLocation));
+			DrawLabeledValue("ProbeYawTarget", f"{Aim.ProbeYawTarget}");
+			DrawLabeledValue("AppliedRotator0Local", FormatRotator(Aim.AppliedRotator0Local));
+			DrawLabeledValue("AppliedRotator1Local", FormatRotator(Aim.AppliedRotator1Local));
+			DrawLabeledValue("MuzzleWorldLocation", FormatVector(Aim.MuzzleWorldLocation));
+			DrawLabeledValue("MuzzleWorldRotation", FormatRotator(Aim.MuzzleWorldRotation));
+			DrawLabeledValue("DistanceToTarget", f"{Aim.DistanceToTarget}");
+			DrawLabeledValue("MuzzleError", FormatRotator(Aim.MuzzleError));
 
 		mm::EndVerticalBox();
 		mm::EndBorder();
 	}
 
-	private void DrawCombatRuntime(UBSRuntimeSubsystem SentrySubsystem, int RowIndex) const
+	private void DrawFireRuntime(UBSRuntimeSubsystem Runtime, int FireIndex) const
 	{
-		const FBSSentryCombatRuntime& Combat = SentrySubsystem.GetCombatRuntime(RowIndex);
+		const FBSFireHotRow& Fire = Runtime.GetFireRuntime(FireIndex);
 
 		mm::BeginBorder(SectionColor);
 		mm::Padding(10.0f);
 		mm::BeginVerticalBox();
 
-			DrawLabeledValue("ShotCooldownRemaining", f"{Combat.ShotCooldownRemaining}");
+			DrawLabeledValue("ShotCooldownRemaining", f"{Fire.ShotCooldownRemaining}");
+			DrawLabeledValue("RPM", f"{Fire.RPM}");
+			DrawLabeledValue("MaxDistance", f"{Fire.MaxDistance}");
+			DrawLabeledValue("MaxAngleDegrees", f"{Fire.MaxAngleDegrees}");
 
 		mm::EndVerticalBox();
 		mm::EndBorder();
 	}
 
-	private void DrawPowerRuntime(UBSRuntimeSubsystem SentrySubsystem, int RowIndex) const
+	private void DrawPowerRuntime(UBSRuntimeSubsystem Runtime, int PowerIndex) const
 	{
-		const FBSPowerRuntime& Power = SentrySubsystem.GetPowerRuntime(RowIndex);
-		const FBPowerRuntimeChildren& PowerChildren = SentrySubsystem.Store.PowerRuntimeChildren[RowIndex];
+		const FBSPowerHotRow& Power = Runtime.GetPowerRuntime(PowerIndex);
+		const FBSPowerChildrenRow& PowerChildren = Runtime.GetPowerChildren(PowerIndex);
 
 		mm::BeginBorder(SectionColor);
 		mm::Padding(10.0f);
@@ -215,19 +222,21 @@ class UBSSentryScreen : UBSMMScreen
 
 			for (int BatteryIndex = 0; BatteryIndex < PowerChildren.Batteries.Num(); BatteryIndex++)
 			{
-				const FBSPowerRuntime& Battery = PowerChildren.Batteries[BatteryIndex];
+				const FBSPowerChildRuntime& Battery = PowerChildren.Batteries[BatteryIndex];
 				mm::Spacer(6.0f);
 				mm::Text(f"Battery[{BatteryIndex}]", 14, HeaderColor);
-				DrawPowerRuntimeValues(Battery);
+				DrawLabeledValue("Reserve", f"{Battery.Reserve}");
+				DrawLabeledValue("Output", f"{Battery.Output}");
+				DrawLabeledValue("Capacity", f"{Battery.Capacity}");
 			}
 
 		mm::EndVerticalBox();
 		mm::EndBorder();
 	}
 
-	private void DrawPowerRuntimeValues(const FBSPowerRuntime& Power) const
+	private void DrawPowerRuntimeValues(const FBSPowerHotRow& Power) const
 	{
-		DrawLabeledValue("TapSource", FormatTapSource(Power.TapSource));
+		DrawLabeledValue("TapSourceBaseIndex", DescribeIndex(Power.TapSourcePowerIndex));
 		DrawLabeledValue("ChildrenReserve", f"{Power.ChildrenReserve}");
 		DrawLabeledValue("Reserve", f"{Power.Reserve}");
 		DrawLabeledValue("AccumulatedDecrease", f"{Power.AccumulatedDecrease}");
@@ -243,37 +252,15 @@ class UBSSentryScreen : UBSMMScreen
 		mm::Text(f"{Label}: {Value}", 14, ValueColor, true);
 	}
 
-	private FGameplayTagContainer ResolveCapabilities(TOptional<int> RowIndex) const
+	private FGameplayTagContainer ResolveCapabilities(UBSModularView RuntimeView) const
 	{
-		UBSRuntimeSubsystem SentrySubsystem = UBSRuntimeSubsystem::Get();
-		if (SentrySubsystem != nullptr && RowIndex.IsSet())
+		UBSRuntimeSubsystem Runtime = UBSRuntimeSubsystem::Get();
+		if (Runtime != nullptr && RuntimeView != nullptr && RuntimeView.RuntimeBaseIndex >= 0)
 		{
-			return SentrySubsystem.Store.Capabilities[RowIndex.Value];
+			return Runtime.GetBaseRow(RuntimeView.RuntimeBaseIndex).Capabilities;
 		}
 
 		return FGameplayTagContainer();
-	}
-
-	private TOptional<int> FindRowIndex(ABSSentry Sentry) const
-	{
-		if (Sentry == nullptr)
-		{
-			return TOptional<int>();
-		}
-
-		UBSRuntimeSubsystem SentrySubsystem = UBSRuntimeSubsystem::Get();
-		if (SentrySubsystem == nullptr)
-		{
-			return TOptional<int>();
-		}
-
-		return SentrySubsystem.GetRowIndex(Sentry);
-	}
-
-	private int GetRuntimeRowCount() const
-	{
-		UBSRuntimeSubsystem SentrySubsystem = UBSRuntimeSubsystem::Get();
-		return SentrySubsystem == nullptr ? 0 : SentrySubsystem.GetRowCount();
 	}
 
 	private FString DescribeObject(UObject Object) const
@@ -286,6 +273,11 @@ class UBSSentryScreen : UBSMMScreen
 		return Actor == nullptr ? "<none>" : Actor.GetName().ToString();
 	}
 
+	private FString DescribeIndex(int32 Index) const
+	{
+		return Index >= 0 ? f"{Index}" : "<none>";
+	}
+
 	private FString FormatVector(FVector Value) const
 	{
 		return f"X={Value.X} Y={Value.Y} Z={Value.Z}";
@@ -294,11 +286,6 @@ class UBSSentryScreen : UBSMMScreen
 	private FString FormatRotator(FRotator Value) const
 	{
 		return f"P={Value.Pitch} Y={Value.Yaw} R={Value.Roll}";
-	}
-
-	private FString FormatTapSource(const TOptional<int32>& TapSource) const
-	{
-		return TapSource.IsSet() ? f"{TapSource.Value}" : "<none>";
 	}
 
 	private FString FormatBool(bool bValue) const

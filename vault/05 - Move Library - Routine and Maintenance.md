@@ -75,6 +75,9 @@ These moves establish ritual, loneliness, station familiarity, and maintenance d
 **Accomplishes:** reveals machinery stress, distant impacts, or line irregularities.  
 **Cost / risk:** no immediate material progress.
 
+## Other
+- [[11 - Move Library - Solitude and Radio#Continue the routine because routine itself keeps panic away]] because routine also functions as emotional self-maintenance, not only upkeep.
+
 ## Related notes
 - [[02 - Intended Experience]]
 - [[12 - Core Moves]]

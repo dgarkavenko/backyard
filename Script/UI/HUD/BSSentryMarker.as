@@ -8,14 +8,16 @@ class UBSSentryMarker : UFUScreenProjectedWidget
 	UFUNCTION(BlueprintOverride)
 	void Tick(FGeometry MyGeometry, float InDeltaTime)
 	{
-		UBSRuntimeSubsystem Runtime = UBSRuntimeSubsystem::Get();
-		if (Runtime != nullptr)
+		UBSModularView ModularView = Model != nullptr ? Model.ModularView : nullptr;
+		if (ModularView != nullptr && ModularView.RuntimePowerIndex >= 0)
 		{
-			auto Index = Runtime.GetRowIndex(Model);
-			if (Index.IsSet())
+			UBSRuntimeSubsystem Runtime = UBSRuntimeSubsystem::Get();
+			if (Runtime != nullptr)
 			{
-				FBSPowerRuntime Power = Runtime.Store.PowerRuntime[Index.Value];
-				Progress.SetValue((Power.ChildrenReserve + Power.Reserve) / (Power.Capacity + Power.ChildrenCapacity));
+				const FBSPowerHotRow& Power = Runtime.GetPowerRuntime(ModularView.RuntimePowerIndex);
+				float TotalCapacity = Power.Capacity + Power.ChildrenCapacity;
+				float TotalReserve = Power.Reserve + Power.ChildrenReserve;
+				Progress.SetValue(TotalCapacity > 0.0f ? TotalReserve / TotalCapacity : 0.0f);
 			}
 		}
 	}

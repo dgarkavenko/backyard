@@ -78,7 +78,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 397.5
   },
   "right": {
     "id": "ef3b60b3ad4780c2",
@@ -185,23 +185,23 @@
   },
   "active": "bcb5cf489a7ab4e0",
   "lastOpenFiles": [
-    "05 - Move Library - Routine and Maintenance.md",
-    "06 - Move Library - Scarcity and Deprivation.md",
-    "12 - Core Moves.md",
+    "03 - Intended Role.md",
+    "04 - Performative Move Framework.md",
     "11 - Move Library - Solitude and Radio.md",
+    "06 - Move Library - Scarcity and Deprivation.md",
+    "05 - Move Library - Routine and Maintenance.md",
+    "12 - Core Moves.md",
     "13 - Crux Triggers.md",
-    "09 - Move Library - Emergency and Triage.md",
+    "14 - Situation Templates.md",
     "15 - System Mapping.md",
     "08 - Move Library - Configuration and Adaptive Defense.md",
-    "03 - Intended Role.md",
+    "09 - Move Library - Emergency and Triage.md",
     "02 - Intended Experience.md",
     "01 - One Pager.md",
     "00 - README.md",
     "16 - Open Design Questions.md",
-    "14 - Situation Templates.md",
     "10 - Move Library - Postponed Gratification and Contemplation.md",
     "07 - Move Library - Anticipation and Interpretation.md",
-    "04 - Performative Move Framework.md",
     "Welcome.md",
     "01.md",
     "Untitled"

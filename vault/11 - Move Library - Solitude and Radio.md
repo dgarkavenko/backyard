@@ -56,6 +56,10 @@ These moves make the wider network feel present without expanding the playable s
 **Accomplishes:** deepens meaning of survival.  
 **Cost / risk:** none mechanically.
 
+## Other
+- [[05 - Move Library - Routine and Maintenance#Stand still and listen to the outpost]] because solitude turns ambient station noise into emotional and tactical interpretation.
+- [[07 - Move Library - Anticipation and Interpretation#Listen to radio chatter for implication]] because radio contact is also a source of weak-signal reading.
+
 ## Related notes
 - [[02 - Intended Experience]]
 - [[03 - Intended Role]]

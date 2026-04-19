@@ -75,6 +75,10 @@ These moves produce suspense, predictive play, and the feeling that weak signals
 **Accomplishes:** justifies over-preparation or caution.  
 **Cost / risk:** can lead to inefficient play.
 
+## Other
+- [[11 - Move Library - Solitude and Radio#Treat instructions as incomplete]] because remote communication often feeds interpretation rather than certainty.
+- [[11 - Move Library - Solitude and Radio#Project meaning onto a distant light or signal]] because anticipation frequently extends beyond direct sensor data.
+
 ## Related notes
 - [[13 - Crux Triggers]]
 - [[14 - Situation Templates]]
