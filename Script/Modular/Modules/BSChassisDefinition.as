@@ -8,9 +8,6 @@ class UBSChassisDefinition : UBSModuleDefinition
 	UPROPERTY(EditAnywhere, Category = "Motion", meta = (ClampMin = "0", ClampMax = "720", Units = "Degrees"))
 	float SweepSpeed = 45.0f;
 
-	UPROPERTY(EditAnywhere, Category = "Power", meta = (ClampMin = "0", Units = "W"))
-	float AimPowerDrawWatts = 15.0f;
-
 	UPROPERTY(EditAnywhere, Category = "Assembly", meta = (ForceInlineRow, TitleProperty = "{ElementId} : {bPitch} | {bYaw} | {bRoll}"))
 	TArray<FBSChassisRotatorSpec> Rotators;
 }

@@ -15,6 +15,7 @@ public class BackyardForge : ModuleRules
 			"InputCore",
 			"EnhancedInput",
 			"AIModule",
+			"NavigationSystem",
 			"StateTreeModule",
 			"GameplayStateTreeModule",
 			"UMG",
@@ -33,6 +34,7 @@ public class BackyardForge : ModuleRules
 
 		PublicIncludePaths.AddRange(new string[] {
 			"BackyardForge",
+			"BackyardForge/Enemies",
 			"BackyardForge/Framework",
 			"BackyardForge/Player",
 			"BackyardForge/Interaction",

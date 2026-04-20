@@ -17,6 +17,9 @@ class UBSTurretDefinition : UBSModuleDefinition
 	UPROPERTY(EditAnywhere, Category = "Fire")
 	FBSSentryShootingRules ShootingRules;
 
+	UPROPERTY(EditAnywhere, Category = "Fire", meta = (ClampMin = "0"))
+	float ProjectileDamage = 10.0f;
+
 	UPROPERTY(EditAnywhere, Category = "Power", meta = (ClampMin = "0", Units = "W"))
 	float FiringPowerDrawWatts = 40.0f;
 

@@ -50,7 +50,7 @@ class UBSAnimInstance : UAnimInstance
 			Direction = RawDirection;
 		}
 
-		bShouldMove = (GroundSpeed > 0.01f) && (MovementComponent.GetCurrentAcceleration() != FVector::ZeroVector);
+		bShouldMove = (GroundSpeed > 0.01f);// && (MovementComponent.GetCurrentAcceleration() != FVector::ZeroVector);
 		bIsFalling = MovementComponent.IsFalling();
 	}
 }

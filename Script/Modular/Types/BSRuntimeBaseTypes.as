@@ -9,7 +9,7 @@ struct FBSFireLinks
 	int32 AimIndex = -1;
 }
 
-struct FBSLightLinks
+struct FBSIndicationLinks
 {
 	int32 DetectionIndex = -1;
 	int32 PowerIndex = -1;
@@ -24,7 +24,7 @@ struct FBSBaseRuntimeRow
 	int32 DetectionIndex = -1;
 	int32 AimIndex = -1;
 	int32 FireIndex = -1;
-	int32 LightIndex = -1;
+	int32 IndicationIndex = -1;
 }
 
 mixin FBSDetectionLinks ToDetectionLinks(FBSBaseRuntimeRow Self)
@@ -42,9 +42,9 @@ mixin FBSFireLinks ToFireLinks(FBSBaseRuntimeRow Self)
 	return Links;
 }
 
-mixin FBSLightLinks ToLightLinks(FBSBaseRuntimeRow Self)
+mixin FBSIndicationLinks ToIndicationLinks(FBSBaseRuntimeRow Self)
 {
-	FBSLightLinks Links;
+	FBSIndicationLinks Links;
 	Links.DetectionIndex = Self.DetectionIndex;
 	Links.PowerIndex = Self.PowerIndex;
 	return Links;

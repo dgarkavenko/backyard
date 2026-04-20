@@ -56,7 +56,6 @@ namespace FeaturesAssembly
 		FBSAimHotRow& AimHot = Store.AimHot[AimIndex];
 		FBSAimColdRow& AimCold = Store.AimCold[AimIndex];
 		AimCold.Chassis = Chassis;
-		AimHot.AimPowerDrawWatts = Chassis.AimPowerDrawWatts;
 
 		CacheChassis(Chassis, ModularView.Build[ChassisSlot.Index], AimCold, AimHot);
 		CacheAimGeometry(Actor, ModularComponent, ModularView, AimCold);
@@ -83,10 +82,10 @@ namespace FeaturesAssembly
 		FireHot.FiringPowerDrawWatts = Turret.FiringPowerDrawWatts;
 	}
 
-	void BuildLightFeature(FBSRuntimeStore& Store,
-							int BaseIndex,
-							AActor Actor,
-							UBSModularView ModularView)
+	void BuildIndicationFeature(FBSRuntimeStore& Store,
+								int BaseIndex,
+								AActor Actor,
+								UBSModularView ModularView)
 	{
 		FBSBaseRuntimeRow& BaseRow = Store.BaseRows[BaseIndex];
 		if (BaseRow.DetectionIndex < 0)
@@ -100,43 +99,43 @@ namespace FeaturesAssembly
 			return;
 		}
 
-		int LightIndex = Store.CreateLightRow(BaseIndex);
-		FBSLightHotRow& LightHot = Store.LightHot[LightIndex];
-		FBSLightColdRow& LightCold = Store.LightCold[LightIndex];
+		int IndicationIndex = Store.CreateIndicationRow(BaseIndex);
+		FBSIndicationHotRow& IndicationHot = Store.IndicationHot[IndicationIndex];
+		FBSIndicationColdRow& IndicationCold = Store.IndicationCold[IndicationIndex];
 
-		USpotLightComponent LightComponent = ModularView.CachedVisorSpotLight;
-		if (LightComponent == nullptr)
+		USpotLightComponent IndicatorComponent = ModularView.CachedVisorIndicator;
+		if (IndicatorComponent == nullptr)
 		{
-			LightComponent = USpotLightComponent::GetOrCreate(Actor, n"VisorSpotLight");
-			ModularView.CachedVisorSpotLight = LightComponent;
+			IndicatorComponent = USpotLightComponent::GetOrCreate(Actor, n"VisorSpotLight");
+			ModularView.CachedVisorIndicator = IndicatorComponent;
 		}
 
-		check(LightComponent != nullptr, f"SentryAssembly could not create visor spotlight on actor '{Actor.GetName()}'");
+		check(IndicatorComponent != nullptr, f"SentryAssembly could not create visor indicator on actor '{Actor.GetName()}'");
 
-		LightComponent.AttachToComponent(DetectionCold.SensorComponent);
-		LightComponent.SetIntensityUnits(ELightUnits::Lumens);
-		LightComponent.SetIntensity(LightHot.NominalIntensity);
-		LightComponent.SetLightColor(LightHot.SweepColor, true);
-		LightComponent.AttenuationRadius = 500.0f;
+		IndicatorComponent.AttachToComponent(DetectionCold.SensorComponent);
+		IndicatorComponent.SetIntensityUnits(ELightUnits::Lumens);
+		IndicatorComponent.SetIntensity(IndicationHot.NominalIntensity);
+		IndicatorComponent.SetLightColor(IndicationHot.SweepColor, true);
+		IndicatorComponent.AttenuationRadius = 500.0f;
 
 		float OuterConeAngle = DetectionCold.Detector.HorizontalFovDegrees * 0.5f;
 		OuterConeAngle = Math::Clamp(OuterConeAngle, 1.0f, 90.0f);
-		LightComponent.InnerConeAngle = OuterConeAngle * 0.1f;
-		LightComponent.OuterConeAngle = OuterConeAngle;
+		IndicatorComponent.InnerConeAngle = OuterConeAngle * 0.1f;
+		IndicatorComponent.OuterConeAngle = OuterConeAngle;
 
 		if (DetectionCold.SensorComponent.DoesSocketExist(Sentry::VisorSocketName))
 		{
 			FTransform SensorSocketTransform = DetectionCold.SensorComponent.GetSocketTransform(Sentry::VisorSocketName);
-			LightComponent.WorldLocation = SensorSocketTransform.Location;
-			LightComponent.WorldRotation = SensorSocketTransform.Rotation.Rotator();
+			IndicatorComponent.WorldLocation = SensorSocketTransform.Location;
+			IndicatorComponent.WorldRotation = SensorSocketTransform.Rotation.Rotator();
 		}
 		else
 		{
-			LightComponent.RelativeLocation = FVector(30.0f, 0.0f, 0.0f);
-			LightComponent.RelativeRotation = FRotator(-30.0f, 0.0f, 0.0f);
+			IndicatorComponent.RelativeLocation = FVector(30.0f, 0.0f, 0.0f);
+			IndicatorComponent.RelativeRotation = FRotator(-30.0f, 0.0f, 0.0f);
 		}
 
-		LightCold.LightComponent = LightComponent;
+		IndicationCold.IndicatorComponent = IndicatorComponent;
 	}
 
 	USceneComponent ResolveVisorComponent(UBSModularComponent ModularComponent, UBSModularView ModularView)

@@ -33,11 +33,6 @@ class UBSAssemblyScreen : UBSMMScreen
 		}
 
 		ABSSentry Sentry = GetSentry();
-		if (Sentry != nullptr && SentryDebugF::ShowSockets.Int > 0)
-		{
-			SentryDebugF::DrawSockets(Sentry);
-		}
-
 		mm::BeginDraw(MMWidget);
 
 		mm::BeginHorizontalBox();
@@ -97,7 +92,18 @@ class UBSAssemblyScreen : UBSMMScreen
 		return Sentry.ModularComponent;
 	}
 
-	FString GetLeafs(FGameplayTagContainer Container)
+	private UBSModularView GetView() const
+	{
+		ABSSentry Sentry = GetSentry();
+		if (Sentry == nullptr)
+		{
+			return nullptr;
+		}
+
+		return Sentry.ModularView;
+	}
+
+	FString GetLeafNames(FGameplayTagContainer Container)
 	{
 		TArray<FString> Leafs;
 
@@ -115,6 +121,8 @@ class UBSAssemblyScreen : UBSMMScreen
 		mm::Spacer(5.0f);
 
 		UBSModularComponent ModularComponent = GetModularComponent();
+		auto View = GetView();
+
 		if (ModularComponent == nullptr)
 		{
 			return;
@@ -131,7 +139,7 @@ class UBSAssemblyScreen : UBSMMScreen
 		if (SelectedSlotIndex >= 0 && SelectedSlotIndex < ModularComponent.Slots.Num())
 		{
 			const FBFModuleSlot& SelectedSlot = ModularComponent.Slots[SelectedSlotIndex].SlotData;
-			FString SelectedLabel = GetLeafs(SelectedSlot.Tags);
+			FString SelectedLabel = GetLeafNames(SelectedSlot.Tags);
 
 			if (SelectedLabel.IsEmpty())
 			{
@@ -145,11 +153,12 @@ class UBSAssemblyScreen : UBSMMScreen
 		{
 			const FBFModuleSlot& SlotData = ModularComponent.Slots[Index].SlotData;
 
-			FString SlotLabel = f"{GetLeafs(SlotData.Tags)} [{SlotData.Socket.ToString()}]";
+			FString SlotLabel = f"{GetLeafNames(SlotData.Tags)} [{SlotData.Socket.ToString()}]";
 
 			if (SlotLabel.IsEmpty())
 			{
 				SlotLabel = f"Slot {Index}";
+				break;
 			}
 
 			UBSModuleDefinition InstalledModule = ModularComponent.Slots[Index].Content.IsSet() ? ModularComponent.Slots[Index].GetDefinitionUnsafe(ModularComponent) : nullptr;
@@ -161,18 +170,16 @@ class UBSAssemblyScreen : UBSMMScreen
 			}
 
 			auto ButtonState = mm::Button(SlotLabel);
+			
+			auto Color = bIsSelected ? SelectedColor : ModularComponent.Slots[Index].Content.IsSet() ? OccupiedColor : EmptySlotColor;
+			ButtonState.SetButtonStyleColor(Color);
 
-			if (bIsSelected)
+			if (View != nullptr && Systems::Debug::ShowSockets.Int > 0)
 			{
-				ButtonState.SetButtonStyleColor(SelectedColor);
-			}
-			else if (ModularComponent.Slots[Index].Content.IsSet())
-			{
-				ButtonState.SetButtonStyleColor(OccupiedColor);
-			}
-			else
-			{
-				ButtonState.SetButtonStyleColor(EmptySlotColor);
+				if (!ModularComponent.Slots[Index].Content.IsSet())
+				{
+					Systems::Debug::DrawSlotSocket(View, ModularComponent, Index, Color, bIsSelected ? 20.0f : 10.0f);
+				}
 			}
 
 			if (ButtonState)

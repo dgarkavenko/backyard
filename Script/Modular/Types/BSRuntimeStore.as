@@ -15,8 +15,8 @@ struct FBSRuntimeStore
 	TArray<FBSFireHotRow> FireHot;
 	TArray<FBSFireColdRow> FireCold;
 
-	TArray<FBSLightHotRow> LightHot;
-	TArray<FBSLightColdRow> LightCold;
+	TArray<FBSIndicationHotRow> IndicationHot;
+	TArray<FBSIndicationColdRow> IndicationCold;
 
 	int Num() const
 	{
@@ -57,9 +57,9 @@ struct FBSRuntimeStore
 		{
 			FireHot[Row.FireIndex].OwnerBaseIndex = BaseIndex;
 		}
-		if (Row.LightIndex >= 0)
+		if (Row.IndicationIndex >= 0)
 		{
-			LightHot[Row.LightIndex].OwnerBaseIndex = BaseIndex;
+			IndicationHot[Row.IndicationIndex].OwnerBaseIndex = BaseIndex;
 		}
 	}
 
@@ -200,20 +200,20 @@ struct FBSRuntimeStore
 		FireCold.RemoveAt(LastIndex);
 	}
 
-	int CreateLightRow(int BaseIndex)
+	int CreateIndicationRow(int BaseIndex)
 	{
-		int RowIndex = LightHot.Num();
-		FBSLightHotRow HotRow;
+		int RowIndex = IndicationHot.Num();
+		FBSIndicationHotRow HotRow;
 		HotRow.OwnerBaseIndex = BaseIndex;
-		LightHot.Add(HotRow);
-		LightCold.Add(FBSLightColdRow());
-		BaseRows[BaseIndex].LightIndex = RowIndex;
+		IndicationHot.Add(HotRow);
+		IndicationCold.Add(FBSIndicationColdRow());
+		BaseRows[BaseIndex].IndicationIndex = RowIndex;
 		return RowIndex;
 	}
 
-	void RemoveLightRowSwap(int RowIndex)
+	void RemoveIndicationRowSwap(int RowIndex)
 	{
-		int LastIndex = LightHot.Num() - 1;
+		int LastIndex = IndicationHot.Num() - 1;
 		if (RowIndex < 0 || RowIndex > LastIndex)
 		{
 			return;
@@ -221,13 +221,13 @@ struct FBSRuntimeStore
 
 		if (RowIndex != LastIndex)
 		{
-			LightHot[RowIndex] = LightHot[LastIndex];
-			LightCold[RowIndex] = LightCold[LastIndex];
-			BaseRows[LightHot[RowIndex].OwnerBaseIndex].LightIndex = RowIndex;
+			IndicationHot[RowIndex] = IndicationHot[LastIndex];
+			IndicationCold[RowIndex] = IndicationCold[LastIndex];
+			BaseRows[IndicationHot[RowIndex].OwnerBaseIndex].IndicationIndex = RowIndex;
 		}
 
-		LightHot.RemoveAt(LastIndex);
-		LightCold.RemoveAt(LastIndex);
+		IndicationHot.RemoveAt(LastIndex);
+		IndicationCold.RemoveAt(LastIndex);
 	}
 
 	void RebuildActorLookup()
@@ -258,10 +258,10 @@ struct FBSRuntimeStore
 			HotRow.Links = BaseRows[HotRow.OwnerBaseIndex].ToFireLinks();
 		}
 
-		for (int LightIndex = 0; LightIndex < LightHot.Num(); LightIndex++)
+		for (int IndicationIndex = 0; IndicationIndex < IndicationHot.Num(); IndicationIndex++)
 		{
-			FBSLightHotRow& HotRow = LightHot[LightIndex];
-			HotRow.Links = BaseRows[HotRow.OwnerBaseIndex].ToLightLinks();
+			FBSIndicationHotRow& HotRow = IndicationHot[IndicationIndex];
+			HotRow.Links = BaseRows[HotRow.OwnerBaseIndex].ToIndicationLinks();
 		}
 	}
 
@@ -287,7 +287,7 @@ struct FBSRuntimeStore
 		AimCold.Empty();
 		FireHot.Empty();
 		FireCold.Empty();
-		LightHot.Empty();
-		LightCold.Empty();
+		IndicationHot.Empty();
+		IndicationCold.Empty();
 	}
 }

@@ -3,6 +3,8 @@ struct FBSAimHotRow
 	int32 OwnerBaseIndex = -1;
 	bool bHasAimTarget = false;
 	bool bUseProbe = false;
+	bool bHasConfirmation = false;
+
 	FVector AimTargetLocation = FVector::ZeroVector;
 	float ProbeYawTarget = 0.0f;
 	FRotator AppliedRotator0Local = FRotator(0, 0, 0);
@@ -15,7 +17,6 @@ struct FBSAimHotRow
 	// static
 	FBSSentryConstraint Rotator0Constraint;
 	FBSSentryConstraint Rotator1Constraint;
-	float AimPowerDrawWatts = 0.0f;
 }
 
 struct FBSAimColdRow
