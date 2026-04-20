@@ -39,7 +39,7 @@ namespace FeaturesAssembly
 		}
 	}
 
-	void BuildAimFeature(FBSRuntimeStore& Store,
+	void BuildArticulationFeature(FBSRuntimeStore& Store,
 						  int BaseIndex,
 						  AActor Actor,
 						  UBSModularComponent ModularComponent,
@@ -52,13 +52,13 @@ namespace FeaturesAssembly
 			return;
 		}
 
-		int AimIndex = Store.CreateAimRow(BaseIndex);
-		FBSAimHotRow& AimHot = Store.AimHot[AimIndex];
-		FBSAimColdRow& AimCold = Store.AimCold[AimIndex];
-		AimCold.Chassis = Chassis;
+		int ArticulationIndex = Store.CreateArticulationRow(BaseIndex);
+		FBSArticulationHotRow& ArticulationHot = Store.ArticulationHot[ArticulationIndex];
+		FBSArticulationColdRow& ArticulationCold = Store.ArticulationCold[ArticulationIndex];
+		ArticulationCold.Chassis = Chassis;
 
-		CacheChassis(Chassis, ModularView.Build[ChassisSlot.Index], AimCold, AimHot);
-		CacheAimGeometry(Actor, ModularComponent, ModularView, AimCold);
+		CacheChassis(Chassis, ModularView.Build[ChassisSlot.Index], ArticulationCold, ArticulationHot);
+		CacheArticulationGeometry(Actor, ModularComponent, ModularView, ArticulationCold);
 	}
 
 	void BuildFireFeature(FBSRuntimeStore& Store,
@@ -157,8 +157,8 @@ namespace FeaturesAssembly
 
 	void CacheChassis(UBSChassisDefinition Definition,
 					  const FBSBuiltModuleView& BuiltView,
-					  FBSAimColdRow& AimCold,
-					  FBSAimHotRow& AimHot)
+					  FBSArticulationColdRow& ArticulationCold,
+					  FBSArticulationHotRow& ArticulationHot)
 	{
 		check(Definition != nullptr);
 		check(Definition.Rotators.Num() == 2, f"SentryAssembly requires exactly 2 rotators on chassis '{Definition.GetName()}'");
@@ -171,43 +171,43 @@ namespace FeaturesAssembly
 
 			if (RotatorIndex == 0)
 			{
-				AimCold.Rotator0Component = ResolvedRotator;
-				AimHot.Rotator0Constraint = RotatorSpec.Constraint;
-				AimHot.Rotator0Constraint.RotationSpeed = Definition.RotationSpeed;
+				ArticulationCold.Rotator0Component = ResolvedRotator;
+				ArticulationHot.Rotator0Constraint = RotatorSpec.Constraint;
+				ArticulationHot.Rotator0Constraint.RotationSpeed = Definition.RotationSpeed;
 			}
 			else
 			{
-				AimCold.Rotator1Component = ResolvedRotator;
-				AimHot.Rotator1Constraint = RotatorSpec.Constraint;
-				AimHot.Rotator1Constraint.RotationSpeed = Definition.RotationSpeed;
+				ArticulationCold.Rotator1Component = ResolvedRotator;
+				ArticulationHot.Rotator1Constraint = RotatorSpec.Constraint;
+				ArticulationHot.Rotator1Constraint.RotationSpeed = Definition.RotationSpeed;
 			}
 		}
 
-		check(IsYawOnly(AimHot.Rotator0Constraint), f"SentryAssembly requires rotator[0] to be yaw-only on chassis '{Definition.GetName()}'");
-		check(IsPitchOnly(AimHot.Rotator1Constraint), f"SentryAssembly requires rotator[1] to be pitch-only on chassis '{Definition.GetName()}'");
+		check(IsYawOnly(ArticulationHot.Rotator0Constraint), f"SentryAssembly requires rotator[0] to be yaw-only on chassis '{Definition.GetName()}'");
+		check(IsPitchOnly(ArticulationHot.Rotator1Constraint), f"SentryAssembly requires rotator[1] to be pitch-only on chassis '{Definition.GetName()}'");
 	}
 
-	void CacheAimGeometry(AActor Actor,
+	void CacheArticulationGeometry(AActor Actor,
 						  UBSModularComponent ModularComponent,
 						  UBSModularView ModularView,
-						  FBSAimColdRow& AimCold)
+						  FBSArticulationColdRow& ArticulationCold)
 	{
 		check(Actor != nullptr);
 		check(Actor.RootComponent != nullptr);
-		check(AimCold.Rotator0Component != nullptr);
-		check(AimCold.Rotator1Component != nullptr);
+		check(ArticulationCold.Rotator0Component != nullptr);
+		check(ArticulationCold.Rotator1Component != nullptr);
 
-		USceneComponent MuzzleComponent = ResolveMuzzleComponent(ModularComponent, ModularView, AimCold.Rotator1Component);
+		USceneComponent MuzzleComponent = ResolveMuzzleComponent(ModularComponent, ModularView, ArticulationCold.Rotator1Component);
 		check(MuzzleComponent != nullptr, f"SentryAssembly could not resolve muzzle component on actor '{Actor.GetName()}'");
 
 		FTransform MuzzleTransformWorld = ResolveMuzzleTransform(MuzzleComponent);
-		AimCold.MuzzleComponent = MuzzleComponent;
-		AimCold.Rotator0OffsetLocal = Actor.ActorTransform.InverseTransformPosition(AimCold.Rotator0Component.WorldLocation);
-		AimCold.Rotator1OffsetLocal = AimCold.Rotator0Component.WorldTransform.InverseTransformPosition(AimCold.Rotator1Component.WorldLocation);
-		AimCold.MuzzleOffsetLocal = AimCold.Rotator1Component.WorldTransform.InverseTransformPosition(MuzzleTransformWorld.Location);
-		AimCold.MuzzleLocalRotation = AimCold.Rotator1Component.WorldRotation.Quaternion().Inverse() * MuzzleTransformWorld.Rotation;
+		ArticulationCold.MuzzleComponent = MuzzleComponent;
+		ArticulationCold.Rotator0OffsetLocal = Actor.ActorTransform.InverseTransformPosition(ArticulationCold.Rotator0Component.WorldLocation);
+		ArticulationCold.Rotator1OffsetLocal = ArticulationCold.Rotator0Component.WorldTransform.InverseTransformPosition(ArticulationCold.Rotator1Component.WorldLocation);
+		ArticulationCold.MuzzleOffsetLocal = ArticulationCold.Rotator1Component.WorldTransform.InverseTransformPosition(MuzzleTransformWorld.Location);
+		ArticulationCold.MuzzleLocalRotation = ArticulationCold.Rotator1Component.WorldRotation.Quaternion().Inverse() * MuzzleTransformWorld.Rotation;
 
-		FRotator MuzzleLocalRotation = AimCold.MuzzleLocalRotation.Rotator().GetNormalized();
+		FRotator MuzzleLocalRotation = ArticulationCold.MuzzleLocalRotation.Rotator().GetNormalized();
 		check(Math::Abs(MuzzleLocalRotation.Yaw) <= 0.1f && Math::Abs(MuzzleLocalRotation.Pitch) <= 0.1f,
 			  f"SentryAssembly requires muzzle alignment on actor '{Actor.GetName()}'");
 	}

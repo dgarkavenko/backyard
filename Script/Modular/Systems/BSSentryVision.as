@@ -3,7 +3,7 @@ namespace Systems
 	namespace SentryVision
 	{
 		/**
-		 * Reads: BaseRows, DetectionHot, DetectionCold, AimCold, FireHot
+		 * Reads: BaseRows, DetectionHot, DetectionCold, ArticulationCold, FireHot
 		 * Writes: DetectionHot
 		 */
 		void Tick(FBSRuntimeStore& Store, float DeltaSeconds)
@@ -11,6 +11,12 @@ namespace Systems
 			for (int DetectionIndex = 0; DetectionIndex < Store.DetectionHot.Num(); DetectionIndex++)
 			{
 				FBSDetectionHotRow& DetectionHot = Store.DetectionHot[DetectionIndex];
+				if (!HasPower(Store, DetectionHot.Links.PowerIndex))
+				{
+					ResetUnpoweredState(DetectionHot);
+					continue;
+				}
+
 				const FBSDetectionColdRow& DetectionCold = Store.DetectionCold[DetectionIndex];
 				const FBSBaseRuntimeRow& BaseRow = Store.BaseRows[DetectionHot.OwnerBaseIndex];
 
@@ -32,6 +38,19 @@ namespace Systems
 				AcquireTarget(DetectionHot);
 				UpdateProbeIntent(Store, DetectionHot, DeltaSeconds);
 			}
+		}
+
+		bool HasPower(const FBSRuntimeStore& Store, int PowerIndex)
+		{
+			return PowerIndex >= 0 && Store.PowerHot[PowerIndex].bSupplied;
+		}
+
+		void ResetUnpoweredState(FBSDetectionHotRow& DetectionHot)
+		{
+			DetectionHot.Contacts.Empty();
+			DetectionHot.CurrentTarget = nullptr;
+			DetectionHot.CurrentTargetLocation = FVector::ZeroVector;
+			DetectionHot.VisionState = EBSSentryVisionState::Probing;
 		}
 
 		/**
@@ -103,7 +122,7 @@ namespace Systems
 		}
 
 		/**
-		 * Reads: BaseRows, DetectionHot.Contacts, FireHot, AimHot, AimCold
+		 * Reads: BaseRows, DetectionHot.Contacts, FireHot, ArticulationHot, ArticulationCold
 		 * Writes: DetectionHot.ContactMemory
 		 */
 		void SyncContactMemory(const FBSRuntimeStore& Store,
@@ -214,7 +233,7 @@ namespace Systems
 		}
 
 		/**
-		 * Reads: DetectionHot, AimCold
+		 * Reads: DetectionHot, ArticulationCold
 		 * Writes: DetectionHot.ProbeTargetYaw, DetectionHot.ProbeDwellRemaining, DetectionHot.ProbeDirection
 		 */
 		void UpdateProbeIntent(const FBSRuntimeStore& Store, FBSDetectionHotRow& DetectionHot, float DeltaSeconds)
@@ -237,18 +256,18 @@ namespace Systems
 			}
 
 			DetectionHot.ProbeTargetYaw = GetProbeEdgeYaw(DetectionHot);
-			if (DetectionHot.Links.AimIndex < 0)
+			if (DetectionHot.Links.ArticulationIndex < 0)
 			{
 				return;
 			}
 
-			const FBSAimColdRow& AimCold = Store.AimCold[DetectionHot.Links.AimIndex];
-			if (AimCold.Rotator0Component == nullptr)
+			const FBSArticulationColdRow& ArticulationCold = Store.ArticulationCold[DetectionHot.Links.ArticulationIndex];
+			if (ArticulationCold.Rotator0Component == nullptr)
 			{
 				return;
 			}
 
-			if (HasReachedProbeEdge(AimCold.Rotator0Component.RelativeRotation, DetectionHot.ProbeTargetYaw))
+			if (HasReachedProbeEdge(ArticulationCold.Rotator0Component.RelativeRotation, DetectionHot.ProbeTargetYaw))
 			{
 				AdvanceProbeDwell(DetectionHot, DeltaSeconds);
 			}
@@ -338,7 +357,7 @@ namespace Systems
 		}
 
 		/**
-		 * Reads: BaseRows, DetectionHot, FireHot, AimHot, AimCold
+		 * Reads: BaseRows, DetectionHot, FireHot, ArticulationHot, ArticulationCold
 		 * Writes: no runtime rows
 		 */
 		bool IsSelectableContact(const FBSRuntimeStore& Store,
@@ -360,7 +379,7 @@ namespace Systems
 				}
 			}
 
-			if (DetectionHot.Links.AimIndex < 0)
+			if (DetectionHot.Links.ArticulationIndex < 0)
 			{
 				return true;
 			}
@@ -371,7 +390,7 @@ namespace Systems
 				ReachabilityTolerance = Store.FireHot[DetectionHot.Links.FireIndex].MaxAngleDegrees;
 			}
 
-			return Systems::SentryAim::PreviewTarget(BaseRow, Store.AimCold[DetectionHot.Links.AimIndex], Store.AimHot[DetectionHot.Links.AimIndex], Contact.WorldLocation, ReachabilityTolerance);
+			return Systems::Articulation::PreviewTarget(BaseRow, Store.ArticulationCold[DetectionHot.Links.ArticulationIndex], Store.ArticulationHot[DetectionHot.Links.ArticulationIndex], Contact.WorldLocation, ReachabilityTolerance);
 		}
 
 		/**

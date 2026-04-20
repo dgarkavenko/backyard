@@ -15,10 +15,10 @@ namespace Systems
 				}
 
 				float ChainInsuficency = 0.0f;
-				bool bSupplied = true;
+				bool bSupplied = false;
 				if (IndicationHot.Links.PowerIndex >= 0)
 				{
-					ChainInsuficency = 0;
+					ChainInsuficency = Store.PowerHot[IndicationHot.Links.PowerIndex].ChainInsufficency;
 					bSupplied = Store.PowerHot[IndicationHot.Links.PowerIndex].bSupplied;
 				}
 
@@ -28,6 +28,14 @@ namespace Systems
 					IndicationHot.DesiredColor = DetectionHot.VisionState == EBSSentryVisionState::Probing ? IndicationHot.SweepColor : IndicationHot.ActiveColor;
 				}
 
+				if (!bSupplied && IndicationHot.Links.ArticulationIndex >= 0)
+				{
+					Systems::Articulation::ApplyUnpoweredPose(
+						Store.ArticulationCold[IndicationHot.Links.ArticulationIndex],
+						Store.ArticulationHot[IndicationHot.Links.ArticulationIndex],
+						DeltaSeconds);
+				}
+
 				if (!bSupplied)
 				{
 					IndicationHot.DesiredIntensity = 0.0f;
@@ -35,7 +43,7 @@ namespace Systems
 				else if (ChainInsuficency > 0.0f)
 				{
 					float T = Gameplay::TimeSeconds + IndicationIndex;
-					float I = Math::Min(1.0f, Math::Abs(2.0f * Math::Sin(0.3f * T) + Math::Cos(T * 6.0f)));
+					float I = Math::Min(1.0f, Math::Abs(1.6f * Math::Sin(0.3f * T) + Math::Cos(T * 6.0f)));
 					IndicationHot.DesiredIntensity = Math::Lerp(IndicationHot.FlickerLowIntensity, IndicationHot.FlickerHighIntensity, I);
 				}
 				else

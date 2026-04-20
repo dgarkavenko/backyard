@@ -2,6 +2,57 @@ namespace Systems
 {
 	namespace Power
 	{
+		const float FeatureDemandWatts = 1650.0f;
+
+		void AccumulateDemand(FBSRuntimeStore& Store)
+		{
+			for (int PowerIndex = 0; PowerIndex < Store.PowerHot.Num(); PowerIndex++)
+			{
+				Store.PowerHot[PowerIndex].Demand = 0.0f;
+			}
+
+			for (int DetectionIndex = 0; DetectionIndex < Store.DetectionHot.Num(); DetectionIndex++)
+			{
+				const FBSDetectionHotRow& DetectionHot = Store.DetectionHot[DetectionIndex];
+				if (DetectionHot.Links.PowerIndex >= 0)
+				{
+					Store.PowerHot[DetectionHot.Links.PowerIndex].Demand += FeatureDemandWatts;
+				}
+			}
+
+			for (int ArticulationIndex = 0; ArticulationIndex < Store.ArticulationHot.Num(); ArticulationIndex++)
+			{
+				const FBSArticulationHotRow& ArticulationHot = Store.ArticulationHot[ArticulationIndex];
+				const FBSArticulationColdRow& ArticulationCold = Store.ArticulationCold[ArticulationIndex];
+				if (ArticulationHot.Links.PowerIndex >= 0
+					&& ArticulationCold.Rotator0Component != nullptr
+					&& ArticulationCold.Rotator1Component != nullptr
+					&& ArticulationCold.MuzzleComponent != nullptr)
+				{
+					Store.PowerHot[ArticulationHot.Links.PowerIndex].Demand += FeatureDemandWatts;
+				}
+			}
+
+			for (int FireIndex = 0; FireIndex < Store.FireHot.Num(); FireIndex++)
+			{
+				const FBSFireHotRow& FireHot = Store.FireHot[FireIndex];
+				if (FireHot.Links.PowerIndex >= 0 && FireHot.Links.ArticulationIndex >= 0)
+				{
+					Store.PowerHot[FireHot.Links.PowerIndex].Demand += FeatureDemandWatts;
+				}
+			}
+
+			for (int IndicationIndex = 0; IndicationIndex < Store.IndicationHot.Num(); IndicationIndex++)
+			{
+				const FBSIndicationHotRow& IndicationHot = Store.IndicationHot[IndicationIndex];
+				const FBSIndicationColdRow& IndicationCold = Store.IndicationCold[IndicationIndex];
+				if (IndicationHot.Links.PowerIndex >= 0 && IndicationCold.IndicatorComponent != nullptr)
+				{
+					Store.PowerHot[IndicationHot.Links.PowerIndex].Demand += FeatureDemandWatts;
+				}
+			}
+		}
+
 		/**
 		 * Reads: PowerHot,
 		 * Writes: PowerHot, PowerChildren child reserves
@@ -13,6 +64,7 @@ namespace Systems
 			// TODO: Try merge this two loops
 			for (int PowerIndex = 0; PowerIndex < Store.PowerHot.Num(); PowerIndex++)
 			{
+				Store.PowerHot[PowerIndex].ChainInsufficency = 0.0f;
 				float Demand = Store.PowerHot[PowerIndex].Demand;
 				if (Demand > 0)
 				{

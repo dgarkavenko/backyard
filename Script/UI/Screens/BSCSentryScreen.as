@@ -6,7 +6,7 @@ class UBSSentryScreen : UBSMMScreen
 	default PanelColor = FLinearColor(0.02f, 0.02f, 0.02f, 0.9f);
 
 	bool bShowDetectionRuntime = false;
-	bool bShowAimRuntime = false;
+	bool bShowArticulationRuntime = false;
 	bool bShowFireRuntime = false;
 	bool bShowPowerRuntime = false;
 
@@ -48,7 +48,7 @@ class UBSSentryScreen : UBSMMScreen
 					DrawLabeledValue("Sentry", Sentry.GetName().ToString());
 					DrawLabeledValue("BaseIndex", RuntimeView != nullptr ? DescribeIndex(RuntimeView.RuntimeBaseIndex) : "<missing>");
 					DrawLabeledValue("DetectionIndex", RuntimeView != nullptr ? DescribeIndex(RuntimeView.RuntimeDetectionIndex) : "<missing>");
-					DrawLabeledValue("AimIndex", RuntimeView != nullptr ? DescribeIndex(RuntimeView.RuntimeAimIndex) : "<missing>");
+					DrawLabeledValue("ArticulationIndex", RuntimeView != nullptr ? DescribeIndex(RuntimeView.RuntimeArticulationIndex) : "<missing>");
 					DrawLabeledValue("FireIndex", RuntimeView != nullptr ? DescribeIndex(RuntimeView.RuntimeFireIndex) : "<missing>");
 					DrawLabeledValue("PowerIndex", RuntimeView != nullptr ? DescribeIndex(RuntimeView.RuntimePowerIndex) : "<missing>");
 					mm::Spacer(12.0f);
@@ -66,10 +66,10 @@ class UBSSentryScreen : UBSMMScreen
 						}
 
 						mm::Spacer(8.0f);
-						DrawRuntimeHeader("AIM", bShowAimRuntime);
-						if (bShowAimRuntime && RuntimeView.RuntimeAimIndex >= 0)
+						DrawRuntimeHeader("ARTICULATION", bShowArticulationRuntime);
+						if (bShowArticulationRuntime && RuntimeView.RuntimeArticulationIndex >= 0)
 						{
-							DrawAimRuntime(Runtime, RuntimeView.RuntimeAimIndex);
+							DrawArticulationRuntime(Runtime, RuntimeView.RuntimeArticulationIndex);
 						}
 
 						mm::Spacer(8.0f);
@@ -167,24 +167,24 @@ class UBSSentryScreen : UBSMMScreen
 		mm::EndBorder();
 	}
 
-	private void DrawAimRuntime(UBSRuntimeSubsystem Runtime, int AimIndex) const
+	private void DrawArticulationRuntime(UBSRuntimeSubsystem Runtime, int ArticulationIndex) const
 	{
-		const FBSAimHotRow& Aim = Runtime.GetAimRuntime(AimIndex);
+		const FBSArticulationHotRow& Articulation = Runtime.GetArticulationRuntime(ArticulationIndex);
 
 		mm::BeginBorder(SectionColor);
 		mm::Padding(10.0f);
 		mm::BeginVerticalBox();
 
-			DrawLabeledValue("HasAimTarget", FormatBool(Aim.bHasAimTarget));
-			DrawLabeledValue("UseProbe", FormatBool(Aim.bUseProbe));
-			DrawLabeledValue("AimTargetLocation", FormatVector(Aim.AimTargetLocation));
-			DrawLabeledValue("ProbeYawTarget", f"{Aim.ProbeYawTarget}");
-			DrawLabeledValue("AppliedRotator0Local", FormatRotator(Aim.AppliedRotator0Local));
-			DrawLabeledValue("AppliedRotator1Local", FormatRotator(Aim.AppliedRotator1Local));
-			DrawLabeledValue("MuzzleWorldLocation", FormatVector(Aim.MuzzleWorldLocation));
-			DrawLabeledValue("MuzzleWorldRotation", FormatRotator(Aim.MuzzleWorldRotation));
-			DrawLabeledValue("DistanceToTarget", f"{Aim.DistanceToTarget}");
-			DrawLabeledValue("MuzzleError", FormatRotator(Aim.MuzzleError));
+			DrawLabeledValue("HasArticulationTarget", FormatBool(Articulation.bHasTarget));
+			DrawLabeledValue("UseProbe", FormatBool(Articulation.bUseProbe));
+			DrawLabeledValue("TargetLocation", FormatVector(Articulation.TargetLocation));
+			DrawLabeledValue("ProbeYawTarget", f"{Articulation.ProbeYawTarget}");
+			DrawLabeledValue("AppliedRotator0Local", FormatRotator(Articulation.AppliedRotator0Local));
+			DrawLabeledValue("AppliedRotator1Local", FormatRotator(Articulation.AppliedRotator1Local));
+			DrawLabeledValue("MuzzleWorldLocation", FormatVector(Articulation.MuzzleWorldLocation));
+			DrawLabeledValue("MuzzleWorldRotation", FormatRotator(Articulation.MuzzleWorldRotation));
+			DrawLabeledValue("DistanceToTarget", f"{Articulation.DistanceToTarget}");
+			DrawLabeledValue("MuzzleError", FormatRotator(Articulation.MuzzleError));
 
 		mm::EndVerticalBox();
 		mm::EndBorder();

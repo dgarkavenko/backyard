@@ -9,8 +9,8 @@ struct FBSRuntimeStore
 	TArray<FBSDetectionHotRow> DetectionHot;
 	TArray<FBSDetectionColdRow> DetectionCold;
 
-	TArray<FBSAimHotRow> AimHot;
-	TArray<FBSAimColdRow> AimCold;
+	TArray<FBSArticulationHotRow> ArticulationHot;
+	TArray<FBSArticulationColdRow> ArticulationCold;
 
 	TArray<FBSFireHotRow> FireHot;
 	TArray<FBSFireColdRow> FireCold;
@@ -49,9 +49,9 @@ struct FBSRuntimeStore
 		{
 			DetectionHot[Row.DetectionIndex].OwnerBaseIndex = BaseIndex;
 		}
-		if (Row.AimIndex >= 0)
+		if (Row.ArticulationIndex >= 0)
 		{
-			AimHot[Row.AimIndex].OwnerBaseIndex = BaseIndex;
+			ArticulationHot[Row.ArticulationIndex].OwnerBaseIndex = BaseIndex;
 		}
 		if (Row.FireIndex >= 0)
 		{
@@ -140,20 +140,20 @@ struct FBSRuntimeStore
 		DetectionCold.RemoveAt(LastIndex);
 	}
 
-	int CreateAimRow(int BaseIndex)
+	int CreateArticulationRow(int BaseIndex)
 	{
-		int RowIndex = AimHot.Num();
-		FBSAimHotRow HotRow;
+		int RowIndex = ArticulationHot.Num();
+		FBSArticulationHotRow HotRow;
 		HotRow.OwnerBaseIndex = BaseIndex;
-		AimHot.Add(HotRow);
-		AimCold.Add(FBSAimColdRow());
-		BaseRows[BaseIndex].AimIndex = RowIndex;
+		ArticulationHot.Add(HotRow);
+		ArticulationCold.Add(FBSArticulationColdRow());
+		BaseRows[BaseIndex].ArticulationIndex = RowIndex;
 		return RowIndex;
 	}
 
-	void RemoveAimRowSwap(int RowIndex)
+	void RemoveArticulationRowSwap(int RowIndex)
 	{
-		int LastIndex = AimHot.Num() - 1;
+		int LastIndex = ArticulationHot.Num() - 1;
 		if (RowIndex < 0 || RowIndex > LastIndex)
 		{
 			return;
@@ -161,13 +161,13 @@ struct FBSRuntimeStore
 
 		if (RowIndex != LastIndex)
 		{
-			AimHot[RowIndex] = AimHot[LastIndex];
-			AimCold[RowIndex] = AimCold[LastIndex];
-			BaseRows[AimHot[RowIndex].OwnerBaseIndex].AimIndex = RowIndex;
+			ArticulationHot[RowIndex] = ArticulationHot[LastIndex];
+			ArticulationCold[RowIndex] = ArticulationCold[LastIndex];
+			BaseRows[ArticulationHot[RowIndex].OwnerBaseIndex].ArticulationIndex = RowIndex;
 		}
 
-		AimHot.RemoveAt(LastIndex);
-		AimCold.RemoveAt(LastIndex);
+		ArticulationHot.RemoveAt(LastIndex);
+		ArticulationCold.RemoveAt(LastIndex);
 	}
 
 	int CreateFireRow(int BaseIndex)
@@ -252,6 +252,12 @@ struct FBSRuntimeStore
 			HotRow.Links = BaseRows[HotRow.OwnerBaseIndex].ToDetectionLinks();
 		}
 
+		for (int ArticulationIndex = 0; ArticulationIndex < ArticulationHot.Num(); ArticulationIndex++)
+		{
+			FBSArticulationHotRow& HotRow = ArticulationHot[ArticulationIndex];
+			HotRow.Links = BaseRows[HotRow.OwnerBaseIndex].ToArticulationLinks();
+		}
+
 		for (int FireIndex = 0; FireIndex < FireHot.Num(); FireIndex++)
 		{
 			FBSFireHotRow& HotRow = FireHot[FireIndex];
@@ -283,8 +289,8 @@ struct FBSRuntimeStore
 		PowerChildren.Empty();
 		DetectionHot.Empty();
 		DetectionCold.Empty();
-		AimHot.Empty();
-		AimCold.Empty();
+		ArticulationHot.Empty();
+		ArticulationCold.Empty();
 		FireHot.Empty();
 		FireCold.Empty();
 		IndicationHot.Empty();

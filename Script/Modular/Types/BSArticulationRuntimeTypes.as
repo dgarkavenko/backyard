@@ -1,11 +1,12 @@
-struct FBSAimHotRow
+struct FBSArticulationHotRow
 {
 	int32 OwnerBaseIndex = -1;
-	bool bHasAimTarget = false;
+	FBSArticulationLinks Links;
+	bool bHasTarget = false;
 	bool bUseProbe = false;
 	bool bHasConfirmation = false;
 
-	FVector AimTargetLocation = FVector::ZeroVector;
+	FVector TargetLocation = FVector::ZeroVector;
 	float ProbeYawTarget = 0.0f;
 	FRotator AppliedRotator0Local = FRotator(0, 0, 0);
 	FRotator AppliedRotator1Local = FRotator(0, 0, 0);
@@ -13,13 +14,15 @@ struct FBSAimHotRow
 	FRotator MuzzleWorldRotation = FRotator(0, 0, 0);
 	float DistanceToTarget = 0.0f;
 	FRotator MuzzleError = FRotator(0, 0, 0);
+	FBSFloatTweenState UnpoweredPitchTween;
+	bool bWasPowered = true;
 
 	// static
 	FBSSentryConstraint Rotator0Constraint;
 	FBSSentryConstraint Rotator1Constraint;
 }
 
-struct FBSAimColdRow
+struct FBSArticulationColdRow
 {
 	UBSChassisDefinition Chassis;
 	USceneComponent Rotator0Component;

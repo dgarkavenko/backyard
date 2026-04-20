@@ -3,7 +3,7 @@ namespace Systems
 	namespace Debug
 	{
 		const FConsoleVariable ShowSockets(f"BF.Sentry.ShowSockets", 1);
-		const FConsoleVariable ShowAim(f"BF.Sentry.ShowAim", 0);
+		const FConsoleVariable ShowArticulation(f"BF.Sentry.ShowArticulation", 0);
 		const FConsoleVariable ShowVision(f"bf.show.sentryvision", 0);
 		const FConsoleVariable ValidateAssembly(f"BF.Sentry.ValidateAssembly", 0);
 
@@ -162,11 +162,11 @@ namespace Systems
 
 		void Tick(FBSRuntimeStore& Store)
 		{
-			if (Debug::ShowAim.Int > 0)
+			if (Debug::ShowArticulation.Int > 0)
 			{
-				for (int AimIndex = 0; AimIndex < Store.AimHot.Num(); AimIndex++)
+				for (int ArticulationIndex = 0; ArticulationIndex < Store.ArticulationHot.Num(); ArticulationIndex++)
 				{
-					Debug::DrawAim(Store.AimHot[AimIndex]);
+					Debug::DrawArticulation(Store.ArticulationHot[ArticulationIndex]);
 				}
 			}
 
@@ -177,38 +177,38 @@ namespace Systems
 					const FBSDetectionHotRow& DetectionHot = Store.DetectionHot[DetectionIndex];
 					const FBSDetectionColdRow& DetectionCold = Store.DetectionCold[DetectionIndex];
 					const FBSBaseRuntimeRow& BaseRow = Store.BaseRows[DetectionHot.OwnerBaseIndex];
-					FBSAimColdRow AimCold;
-					FBSAimHotRow AimHot;
-					bool bHasAim = BaseRow.AimIndex >= 0;
-					if (bHasAim)
+					FBSArticulationColdRow ArticulationCold;
+					FBSArticulationHotRow ArticulationHot;
+					bool bHasArticulation = BaseRow.ArticulationIndex >= 0;
+					if (bHasArticulation)
 					{
-						AimCold = Store.AimCold[BaseRow.AimIndex];
-						AimHot = Store.AimHot[BaseRow.AimIndex];
+						ArticulationCold = Store.ArticulationCold[BaseRow.ArticulationIndex];
+						ArticulationHot = Store.ArticulationHot[BaseRow.ArticulationIndex];
 					}
 
-					Debug::DrawVision(Store, BaseRow, DetectionHot, DetectionCold, AimCold, AimHot, bHasAim);
+					Debug::DrawVision(Store, BaseRow, DetectionHot, DetectionCold, ArticulationCold, ArticulationHot, bHasArticulation);
 				}
 			}
 		}
 
-		void DrawAim(const FBSAimHotRow& AimHot)
+		void DrawArticulation(const FBSArticulationHotRow& ArticulationHot)
 		{
-			FVector MuzzleLocation = AimHot.MuzzleWorldLocation;
-			float DistanceToTarget = AimHot.DistanceToTarget;
-			FVector MuzzleForward = AimHot.MuzzleWorldRotation.ForwardVector.GetSafeNormal();
+			FVector MuzzleLocation = ArticulationHot.MuzzleWorldLocation;
+			float DistanceToTarget = ArticulationHot.DistanceToTarget;
+			FVector MuzzleForward = ArticulationHot.MuzzleWorldRotation.ForwardVector.GetSafeNormal();
 
-			System::DrawDebugLine(MuzzleLocation, AimHot.AimTargetLocation, FLinearColor::Yellow, 0, 2);
+			System::DrawDebugLine(MuzzleLocation, ArticulationHot.TargetLocation, FLinearColor::Yellow, 0, 2);
 			System::DrawDebugLine(MuzzleLocation, MuzzleLocation + MuzzleForward * DistanceToTarget, FLinearColor::Blue, 0, 2);
-			System::DrawDebugPoint(AimHot.AimTargetLocation, 12.0f, FLinearColor::Yellow, 0, EDrawDebugSceneDepthPriorityGroup::Foreground);
+			System::DrawDebugPoint(ArticulationHot.TargetLocation, 12.0f, FLinearColor::Yellow, 0, EDrawDebugSceneDepthPriorityGroup::Foreground);
 		}
 
 		void DrawVision(const FBSRuntimeStore& Store,
 						const FBSBaseRuntimeRow& BaseRow,
 						const FBSDetectionHotRow& DetectionHot,
 						const FBSDetectionColdRow& DetectionCold,
-						const FBSAimColdRow& AimCold,
-						const FBSAimHotRow& AimHot,
-						bool bHasAim)
+						const FBSArticulationColdRow& ArticulationCold,
+						const FBSArticulationHotRow& ArticulationHot,
+						bool bHasArticulation)
 		{
 			FVector SensorOrigin = Systems::SentryVision::ResolveSensorOrigin(BaseRow, DetectionCold);
 			FVector SensorForward = Systems::SentryVision::ResolveSensorForward(BaseRow, DetectionCold);
@@ -222,7 +222,7 @@ namespace Systems
 			if (ShowVision.Int >= 2)
 			{
 				DrawVisionCandidates(BaseRow, DetectionHot, SensorOrigin, SensorForward, VisionRange);
-				DrawVisionSector(BaseRow, DetectionHot, AimCold, SensorOrigin, SensorForward, VisionRange, bHasAim);
+				DrawVisionSector(BaseRow, DetectionHot, ArticulationCold, SensorOrigin, SensorForward, VisionRange, bHasArticulation);
 			}
 
 			System::DrawDebugPoint(SensorOrigin, 10.0f, FLinearColor::Blue, 0, EDrawDebugSceneDepthPriorityGroup::Foreground);
@@ -313,13 +313,13 @@ namespace Systems
 
 		void DrawVisionSector(const FBSBaseRuntimeRow& BaseRow,
 							  const FBSDetectionHotRow& DetectionHot,
-							  const FBSAimColdRow& AimCold,
+							  const FBSArticulationColdRow& ArticulationCold,
 							  const FVector& SensorOrigin,
 							  const FVector& SensorForward,
 							  float VisionRange,
-							  bool bHasAim)
+							  bool bHasArticulation)
 		{
-			FVector SectorOrigin = AimCold.Rotator0Component != nullptr ? AimCold.Rotator0Component.WorldLocation : SensorOrigin;
+			FVector SectorOrigin = ArticulationCold.Rotator0Component != nullptr ? ArticulationCold.Rotator0Component.WorldLocation : SensorOrigin;
 			FVector HorizontalForward = FVector(SensorForward.X, SensorForward.Y, 0.0f).GetSafeNormal();
 			if (HorizontalForward.IsNearlyZero())
 			{
@@ -346,7 +346,7 @@ namespace Systems
 			System::DrawDebugLine(SectorOrigin, SectorOrigin + LeftDirection * VisionRange, FLinearColor::Blue, 0, 1.0f);
 			System::DrawDebugLine(SectorOrigin, SectorOrigin + RightDirection * VisionRange, FLinearColor::Blue, 0, 1.0f);
 
-			if (!bHasAim)
+			if (!bHasArticulation)
 			{
 				return;
 			}
@@ -357,21 +357,21 @@ namespace Systems
 				NeutralForward = HorizontalForward;
 			}
 
-			float HalfYawLimitDegrees = AimCold.Rotator0Component != nullptr ? StoreYawHalfRangeHint(AimCold) : 0.0f;
+			float HalfYawLimitDegrees = ArticulationCold.Rotator0Component != nullptr ? StoreYawHalfRangeHint(ArticulationCold) : 0.0f;
 			FVector LeftYawLimitDirection = FQuat(FVector::UpVector, Math::DegreesToRadians(-HalfYawLimitDegrees)).RotateVector(NeutralForward);
 			FVector RightYawLimitDirection = FQuat(FVector::UpVector, Math::DegreesToRadians(HalfYawLimitDegrees)).RotateVector(NeutralForward);
 			System::DrawDebugLine(SectorOrigin, SectorOrigin + LeftYawLimitDirection * VisionRange, FLinearColor::Red, 0, 2.0f);
 			System::DrawDebugLine(SectorOrigin, SectorOrigin + RightYawLimitDirection * VisionRange, FLinearColor::Red, 0, 2.0f);
 		}
 
-		float StoreYawHalfRangeHint(const FBSAimColdRow& AimCold)
+		float StoreYawHalfRangeHint(const FBSArticulationColdRow& ArticulationCold)
 		{
-			if (AimCold.Chassis == nullptr || AimCold.Chassis.Rotators.Num() < 1)
+			if (ArticulationCold.Chassis == nullptr || ArticulationCold.Chassis.Rotators.Num() < 1)
 			{
 				return 0.0f;
 			}
 
-			return AimCold.Chassis.Rotators[0].Constraint.RotationRange * 0.5f;
+			return ArticulationCold.Chassis.Rotators[0].Constraint.RotationRange * 0.5f;
 		}
 	}
 }

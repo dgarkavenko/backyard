@@ -6,7 +6,7 @@ class UBSModularView : UActorComponent
 	int32 RuntimeBaseIndex = -1;
 	int32 RuntimePowerIndex = -1;
 	int32 RuntimeDetectionIndex = -1;
-	int32 RuntimeAimIndex = -1;
+	int32 RuntimeArticulationIndex = -1;
 	int32 RuntimeFireIndex = -1;
 	int32 RuntimeIndicationIndex = -1;
 
@@ -66,7 +66,7 @@ class UBSModularView : UActorComponent
 		RuntimeBaseIndex = -1;
 		RuntimePowerIndex = -1;
 		RuntimeDetectionIndex = -1;
-		RuntimeAimIndex = -1;
+		RuntimeArticulationIndex = -1;
 		RuntimeFireIndex = -1;
 		RuntimeIndicationIndex = -1;
 	}
@@ -76,7 +76,7 @@ class UBSModularView : UActorComponent
 		RuntimeBaseIndex = BaseIndex;
 		RuntimePowerIndex = RuntimeRow.PowerIndex;
 		RuntimeDetectionIndex = RuntimeRow.DetectionIndex;
-		RuntimeAimIndex = RuntimeRow.AimIndex;
+		RuntimeArticulationIndex = RuntimeRow.ArticulationIndex;
 		RuntimeFireIndex = RuntimeRow.FireIndex;
 		RuntimeIndicationIndex = RuntimeRow.IndicationIndex;
 	}

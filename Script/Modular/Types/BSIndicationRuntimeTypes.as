@@ -7,7 +7,7 @@ struct FBSIndicationHotRow
 
 	// static
 	float NominalIntensity = 400.0f;
-	float FlickerLowIntensity = 10.0f;
+	float FlickerLowIntensity = 5.0f;
 	float FlickerHighIntensity = 150.0f;
 	float IndicationPowerDrawWatts = 400.0f;
 	FLinearColor SweepColor = FLinearColor(1.00f, 0.31f, 0.07f);

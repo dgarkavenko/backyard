@@ -5,10 +5,11 @@ class UBSRuntimeSubsystem : UScriptWorldSubsystem
 	UFUNCTION(BlueprintOverride)
 	void Tick(float DeltaSeconds)
 	{
+		Systems::Power::AccumulateDemand(Store);
 		Systems::Power::Tick(Store, DeltaSeconds);
 
 		Systems::SentryVision::Tick(Store, DeltaSeconds);
-		Systems::SentryAim::Tick(Store, DeltaSeconds);
+		Systems::Articulation::Tick(Store, DeltaSeconds);
 		Systems::SentryFiring::Tick(Store, DeltaSeconds);
 
 		Systems::Indication::Tick(Store, DeltaSeconds);
@@ -49,7 +50,7 @@ class UBSRuntimeSubsystem : UScriptWorldSubsystem
 		}
 		if (BaseRow.Capabilities.HasTag(GameplayTags::Backyard_Capability_Aim))
 		{
-			FeaturesAssembly::BuildAimFeature(Store, BaseIndex, Actor, ModularComponent, View);
+			FeaturesAssembly::BuildArticulationFeature(Store, BaseIndex, Actor, ModularComponent, View);
 		}
 		if (BaseRow.Capabilities.HasTag(GameplayTags::Backyard_Capability_Fire))
 		{
@@ -64,7 +65,7 @@ class UBSRuntimeSubsystem : UScriptWorldSubsystem
 
 	/**
 	 * Reads: ActorToBaseIndex, BaseRows
-	 * Writes: BaseRows, PowerHot, PowerChildren, DetectionHot, DetectionCold, AimHot, AimCold, FireHot, FireCold, IndicationHot, IndicationCold, ActorToBaseIndex
+	 * Writes: BaseRows, PowerHot, PowerChildren, DetectionHot, DetectionCold, ArticulationHot, ArticulationCold, FireHot, FireCold, IndicationHot, IndicationCold, ActorToBaseIndex
 	 */
 	void RemoveActor(AActor Actor)
 	{
@@ -89,7 +90,7 @@ class UBSRuntimeSubsystem : UScriptWorldSubsystem
 
 	/**
 	 * Reads: BaseRows
-	 * Writes: BaseRows, PowerHot, PowerChildren, DetectionHot, DetectionCold, AimHot, AimCold, FireHot, FireCold, IndicationHot, IndicationCold
+	 * Writes: BaseRows, PowerHot, PowerChildren, DetectionHot, DetectionCold, ArticulationHot, ArticulationCold, FireHot, FireCold, IndicationHot, IndicationCold
 	 */
 	private void ClearBaseFeatures(int BaseIndex)
 	{
@@ -114,10 +115,10 @@ class UBSRuntimeSubsystem : UScriptWorldSubsystem
 			Store.RemoveFireRowSwap(BaseRow.FireIndex);
 			BaseRow.FireIndex = -1;
 		}
-		if (BaseRow.AimIndex >= 0)
+		if (BaseRow.ArticulationIndex >= 0)
 		{
-			Store.RemoveAimRowSwap(BaseRow.AimIndex);
-			BaseRow.AimIndex = -1;
+			Store.RemoveArticulationRowSwap(BaseRow.ArticulationIndex);
+			BaseRow.ArticulationIndex = -1;
 		}
 		if (BaseRow.DetectionIndex >= 0)
 		{
@@ -169,9 +170,9 @@ class UBSRuntimeSubsystem : UScriptWorldSubsystem
 		return Store.DetectionHot[DetectionIndex];
 	}
 
-	const FBSAimHotRow& GetAimRuntime(int AimIndex) const
+	const FBSArticulationHotRow& GetArticulationRuntime(int ArticulationIndex) const
 	{
-		return Store.AimHot[AimIndex];
+		return Store.ArticulationHot[ArticulationIndex];
 	}
 
 	const FBSFireHotRow& GetFireRuntime(int FireIndex) const
@@ -194,9 +195,9 @@ class UBSRuntimeSubsystem : UScriptWorldSubsystem
 		return Store.DetectionCold[DetectionIndex];
 	}
 
-	const FBSAimColdRow& GetAimCold(int AimIndex) const
+	const FBSArticulationColdRow& GetArticulationCold(int ArticulationIndex) const
 	{
-		return Store.AimCold[AimIndex];
+		return Store.ArticulationCold[ArticulationIndex];
 	}
 
 }
