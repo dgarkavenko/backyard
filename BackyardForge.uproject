@@ -63,6 +63,18 @@
 		{
 			"Name": "AngelscriptEnhancedInput",
 			"Enabled": true
+		},
+		{
+			"Name": "PCG",
+			"Enabled": true
+		},
+		{
+			"Name": "AgxTonemapper",
+			"Enabled": true
+		},
+		{
+			"Name": "BlockoutToolsPlugin",
+			"Enabled": true
 		}
 	]
 }

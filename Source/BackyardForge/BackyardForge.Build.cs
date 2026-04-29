@@ -27,7 +27,8 @@ public class BackyardForge : ModuleRules
 			"GameplayTags",
 			"PhysicsCore",
 			"Niagara",
-			"DeveloperSettings"
+			"DeveloperSettings",
+			"PCG"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
@@ -40,6 +41,7 @@ public class BackyardForge : ModuleRules
 			"BackyardForge/Interaction",
 			"BackyardForge/Projectile",
 			"BackyardForge/Utility",
+			"BackyardForge/PCG",
 			"BackyardForge/Variant_Shooter",
 			"BackyardForge/Variant_Shooter/AI",
 			"BackyardForge/Variant_Shooter/UI",
